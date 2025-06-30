@@ -1,6 +1,7 @@
 // DarkMark (C) 2019-2024 Stephane Charette <stephanecharette@gmail.com>
 
 #include "DarkMark.hpp"
+#include <iomanip>
 
 
 dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
@@ -20,6 +21,7 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	is_exporting			(false),
 	export_all_images		(false),
 	export_yolov5_format	(false),
+	export_coco_format		(false),
 	names_file_rewritten	(false),
 	number_of_annotations_deleted(0),
 	number_of_annotations_remapped(0),
@@ -269,21 +271,48 @@ void dm::ClassIdWnd::buttonClicked(Button * button)
 		{
 			export_all_images = (result == 1);
 			
-			// Now ask for the export format
-			const int format_result = NativeMessageBox::show(
+			// Now ask for the export format type
+			const int format_type_result = NativeMessageBox::show(
 				MessageBoxOptions().
 					withAssociatedComponent(this).
 					withIconType(MessageBoxIconType::QuestionIcon).
-					withMessage("Which export format would you like to use?").
+					withMessage("Choose the export format type:").
 					withTitle("DarkMark Export Format").
-					withButton("Darknet/YOLOv4 (current format)").
-					withButton("YOLOv5 (separate images/labels folders)").
+					withButton("YOLO Formats").
+					withButton("COCO Format").
 					withButton("Cancel"));
-					
-			if (format_result > 0)
+			
+			int format_result = 0;
+			
+			if (format_type_result == 1)
+			{
+				// User chose YOLO formats, now ask which YOLO version
+				const int yolo_version_result = NativeMessageBox::show(
+					MessageBoxOptions().
+						withAssociatedComponent(this).
+						withIconType(MessageBoxIconType::QuestionIcon).
+						withMessage("Choose the YOLO format version:").
+						withTitle("DarkMark YOLO Format").
+						withButton("Darknet/YOLOv4").
+						withButton("YOLOv5").
+						withButton("Cancel"));
+				
+				if (yolo_version_result > 0)
+				{
+					format_result = yolo_version_result; // 1 for Darknet/YOLOv4, 2 for YOLOv5
+				}
+			}
+			else if (format_type_result == 2)
+			{
+				// User chose COCO format
+				format_result = 3; // Map to COCO format
+			}
+
+			if (format_result > 0 && format_result <= 3)
 			{
 				is_exporting = true;
 				export_yolov5_format = (format_result == 2);
+				export_coco_format = (format_result == 3);
 				runThread(); // calls run() and waits for it to be done
 				dm::Log("forcing the window to close");
 				closeButtonPressed();
@@ -648,6 +677,10 @@ void dm::ClassIdWnd::run()
 		if (export_yolov5_format)
 		{
 			run_export_yolov5();
+		}
+		else if (export_coco_format)
+		{
+			run_export_coco();
 		}
 		else
 		{
@@ -1335,6 +1368,312 @@ void dm::ClassIdWnd::count_images_and_marks()
 		", images="				+ std::to_string(all_images.size())		);
 
 	return;
+}
+
+
+void dm::ClassIdWnd::run_export_coco()
+{
+	const std::filesystem::path source = dir.getFullPathName().toStdString();
+	const std::filesystem::path target = (source.string() + "_coco_export_" + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
+	export_directory = target;
+
+	Log("COCO export dataset src=" + source.string());
+	Log("COCO export dataset dst=" + target.string());
+
+	setStatusMessage("Exporting files to COCO format: " + target.string() + "...");
+
+	// Create COCO directory structure
+	const std::filesystem::path train_images_dir = target / "train2017";
+	const std::filesystem::path val_images_dir = target / "val2017";
+	const std::filesystem::path annotations_dir = target / "annotations";
+
+	std::error_code ec;
+	std::filesystem::create_directories(train_images_dir, ec);
+	std::filesystem::create_directories(val_images_dir, ec);
+	std::filesystem::create_directories(annotations_dir, ec);
+
+	if (ec)
+	{
+		Log("Failed to create COCO directory structure: " + ec.message());
+		return;
+	}
+
+	// Read class names from .names file
+	std::vector<std::string> class_names;
+	std::ifstream ifs(names_fn);
+	if (ifs.good())
+	{
+		std::string line;
+		while (std::getline(ifs, line))
+		{
+			// Remove any trailing whitespace
+			while (!line.empty() && std::isspace(line.back()))
+			{
+				line.pop_back();
+			}
+			if (!line.empty())
+			{
+				class_names.push_back(line);
+			}
+		}
+		ifs.close();
+	}
+	else
+	{
+		Log("Warning: Could not read .names file for COCO export");
+		return;
+	}
+
+	// Analyze and pair image/label files
+	std::map<std::string, std::filesystem::path> image_map;
+	std::map<std::string, std::filesystem::path> label_map;
+
+	// Build maps of normalized keys to full paths
+	for (const auto& image_path : all_images)
+	{
+		std::filesystem::path img_path(image_path);
+		std::string key = img_path.stem().string(); // Remove extension
+		image_map[key] = img_path;
+	}
+
+	// Find corresponding label files
+	for (const auto& [key, image_path] : image_map)
+	{
+		std::filesystem::path txt_path = std::filesystem::path(image_path).replace_extension(".txt");
+		if (std::filesystem::exists(txt_path))
+		{
+			label_map[key] = txt_path;
+		}
+	}
+
+	// Separate train and val images
+	std::vector<std::pair<std::string, std::filesystem::path>> train_images, val_images;
+	for (const auto& [key, image_path] : image_map)
+	{
+		if (export_all_images || label_map.count(key))
+		{
+			// Determine if this is train or val based on path
+			std::string path_str = image_path.string();
+			if (path_str.find("val") != std::string::npos || path_str.find("valid") != std::string::npos)
+			{
+				val_images.push_back({key, image_path});
+			}
+			else
+			{
+				train_images.push_back({key, image_path});
+			}
+		}
+	}
+
+	// Sort images for consistent ordering
+	std::sort(train_images.begin(), train_images.end(), 
+		[](const auto& a, const auto& b) { return a.first < b.first; });
+	std::sort(val_images.begin(), val_images.end(), 
+		[](const auto& a, const auto& b) { return a.first < b.first; });
+
+	double work_completed = 0.0f;
+	const double work_to_be_done = train_images.size() + val_images.size();
+
+	// Generate COCO JSON files
+	generate_coco_json(train_images, label_map, class_names, train_images_dir, annotations_dir / "instances_train2017.json", "train", work_completed, work_to_be_done);
+	work_completed += train_images.size();
+	generate_coco_json(val_images, label_map, class_names, val_images_dir, annotations_dir / "instances_val2017.json", "val", work_completed, work_to_be_done);
+
+	// Copy .cfg files (for compatibility)
+	for (const auto & entry : std::filesystem::directory_iterator(source))
+	{
+		if (entry.is_regular_file() and
+			entry.file_size() > 0 and
+			entry.path().extension() == ".cfg")
+		{
+			const std::filesystem::path dst = target / entry.path().filename();
+			std::filesystem::copy_file(entry.path(), dst, ec);
+		}
+	}
+
+	return;
+}
+
+
+void dm::ClassIdWnd::generate_coco_json(const std::vector<std::pair<std::string, std::filesystem::path>>& images, 
+										const std::map<std::string, std::filesystem::path>& label_map,
+										const std::vector<std::string>& class_names,
+										const std::filesystem::path& target_img_dir,
+										const std::filesystem::path& json_path,
+										const std::string& mode,
+										double& work_completed,
+										const double work_to_be_done)
+{
+	// Create COCO JSON structure
+	std::ostringstream json_stream;
+	json_stream << std::fixed << std::setprecision(10); // Preserve floating point precision
+	json_stream << "{\n";
+	
+	// Info section
+	auto now = Time::getCurrentTime();
+	json_stream << "  \"info\": {\n";
+	json_stream << "    \"year\": " << now.getYear() << ",\n";
+	json_stream << "    \"version\": \"1.0\",\n";
+	json_stream << "    \"description\": \"Dataset exported from DarkMark v" << DARKMARK_VERSION << "\",\n";
+	json_stream << "    \"contributor\": \"DarkMark\",\n";
+	json_stream << "    \"url\": \"https://github.com/stephanecharette/DarkMark\",\n";
+	json_stream << "    \"date_created\": \"" << now.formatted("%Y-%m-%d").toStdString() << "\"\n";
+	json_stream << "  },\n";
+	
+	// Licenses section
+	json_stream << "  \"licenses\": [\n";
+	json_stream << "    {\n";
+	json_stream << "      \"id\": 1,\n";
+	json_stream << "      \"name\": \"Apache License v2.0\",\n";
+	json_stream << "      \"url\": \"https://www.apache.org/licenses/LICENSE-2.0\"\n";
+	json_stream << "    }\n";
+	json_stream << "  ],\n";
+	
+	// Categories section
+	json_stream << "  \"categories\": [\n";
+	for (size_t i = 0; i < class_names.size(); ++i)
+	{
+		json_stream << "    {\n";
+		json_stream << "      \"id\": " << (i + 1) << ",\n";
+		json_stream << "      \"name\": \"" << class_names[i] << "\",\n";
+		json_stream << "      \"supercategory\": null\n";
+		json_stream << "    }";
+		if (i < class_names.size() - 1) json_stream << ",";
+		json_stream << "\n";
+	}
+	json_stream << "  ],\n";
+	
+	// Images and annotations sections
+	json_stream << "  \"images\": [\n";
+	
+	std::vector<std::string> annotations_json;
+	size_t annotation_id = 1;
+	
+	for (size_t img_idx = 0; img_idx < images.size(); ++img_idx)
+	{
+		if (threadShouldExit()) break;
+		
+		setProgress(work_completed / work_to_be_done);
+		work_completed++;
+		
+		const auto& [key, image_path] = images[img_idx];
+		
+		// Read image to get dimensions
+		Image juce_image = ImageFileFormat::loadFrom(File(image_path.string()));
+		if (!juce_image.isValid())
+		{
+			Log("Warning: Could not read image " + image_path.string() + ". Skipping.");
+			continue;
+		}
+		
+		int width = juce_image.getWidth();
+		int height = juce_image.getHeight();
+		
+		// Copy image to target directory
+		std::string filename = image_path.filename().string();
+		std::filesystem::path dest_img_path = target_img_dir / filename;
+		std::error_code ec;
+		std::filesystem::copy_file(image_path, dest_img_path, ec);
+		if (ec)
+		{
+			Log("Failed to copy image " + image_path.string() + ": " + ec.message());
+			continue;
+		}
+		
+		number_of_files_copied++;
+		
+		// Add image info to JSON
+		json_stream << "    {\n";
+		json_stream << "      \"id\": " << (img_idx + 1) << ",\n";
+		json_stream << "      \"file_name\": \"" << filename << "\",\n";
+		json_stream << "      \"height\": " << height << ",\n";
+		json_stream << "      \"width\": " << width << ",\n";
+		json_stream << "      \"license\": null,\n";
+		json_stream << "      \"date_captured\": null\n";
+		json_stream << "    }";
+		if (img_idx < images.size() - 1) json_stream << ",";
+		json_stream << "\n";
+		
+		// Process annotations for this image
+		auto label_it = label_map.find(key);
+		if (label_it != label_map.end())
+		{
+			std::ifstream label_file(label_it->second);
+			if (label_file.good())
+			{
+				std::string line;
+				while (std::getline(label_file, line))
+				{
+					if (line.empty()) continue;
+					
+					std::istringstream iss(line);
+					int class_id;
+					double cx, cy, w, h;
+					
+					if (iss >> class_id >> cx >> cy >> w >> h)
+					{
+						// Convert from YOLO format (normalized) to COCO format (absolute)
+						double abs_cx = cx * width;
+						double abs_cy = cy * height;
+						double abs_w = w * width;
+						double abs_h = h * height;
+						
+						double x0 = std::max(abs_cx - abs_w / 2.0, 0.0);
+						double y0 = std::max(abs_cy - abs_h / 2.0, 0.0);
+						double x1 = std::min(x0 + abs_w, (double)width);
+						double y1 = std::min(y0 + abs_h, (double)height);
+						
+						double bbox_w = x1 - x0;
+						double bbox_h = y1 - y0;
+						double area = bbox_w * bbox_h;
+						
+						// Create annotation JSON
+						std::ostringstream ann_stream;
+						ann_stream << std::fixed << std::setprecision(10); // Preserve floating point precision
+						ann_stream << "    {\n";
+						ann_stream << "      \"id\": " << annotation_id++ << ",\n";
+						ann_stream << "      \"image_id\": " << (img_idx + 1) << ",\n";
+						ann_stream << "      \"category_id\": " << (class_id + 1) << ",\n";
+						ann_stream << "      \"bbox\": [" << x0 << ", " << y0 << ", " << bbox_w << ", " << bbox_h << "],\n";
+						ann_stream << "      \"area\": " << area << ",\n";
+						ann_stream << "      \"iscrowd\": 0,\n";
+						ann_stream << "      \"segmentation\": [[" << x0 << ", " << y0 << ", " << x1 << ", " << y0 << ", " << x1 << ", " << y1 << ", " << x0 << ", " << y1 << "]]\n";
+						ann_stream << "    }";
+						
+						annotations_json.push_back(ann_stream.str());
+					}
+				}
+				label_file.close();
+			}
+		}
+	}
+	
+	json_stream << "  ],\n";
+	
+	// Annotations section
+	json_stream << "  \"annotations\": [\n";
+	for (size_t i = 0; i < annotations_json.size(); ++i)
+	{
+		json_stream << annotations_json[i];
+		if (i < annotations_json.size() - 1) json_stream << ",";
+		json_stream << "\n";
+	}
+	json_stream << "  ]\n";
+	
+	json_stream << "}\n";
+	
+	// Write JSON file
+	std::ofstream json_file(json_path);
+	if (json_file.good())
+	{
+		json_file << json_stream.str();
+		json_file.close();
+		Log("Generated " + mode + " COCO JSON with " + std::to_string(images.size()) + " images and " + std::to_string(annotations_json.size()) + " annotations");
+	}
+	else
+	{
+		Log("Error: Failed to write COCO JSON file: " + json_path.string());
+	}
 }
 
 
