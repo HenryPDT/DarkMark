@@ -19,6 +19,7 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	done_looking_for_images	(false),
 	is_exporting			(false),
 	export_all_images		(false),
+	export_yolov5_format	(false),
 	names_file_rewritten	(false),
 	number_of_annotations_deleted(0),
 	number_of_annotations_remapped(0),
@@ -266,11 +267,32 @@ void dm::ClassIdWnd::buttonClicked(Button * button)
 		// cancel button seems to always be "0" even when specified last, other buttons are "1" and "2"
 		if (result > 0)
 		{
-			is_exporting = true;
 			export_all_images = (result == 1);
-			runThread(); // calls run() and waits for it to be done
-			dm::Log("forcing the window to close");
-			closeButtonPressed();
+			
+			// Now ask for the export format
+			const int format_result = NativeMessageBox::show(
+				MessageBoxOptions().
+					withAssociatedComponent(this).
+					withIconType(MessageBoxIconType::QuestionIcon).
+					withMessage("Which export format would you like to use?").
+					withTitle("DarkMark Export Format").
+					withButton("Darknet/YOLOv4 (current format)").
+					withButton("YOLOv5 (separate images/labels folders)").
+					withButton("Cancel"));
+					
+			if (format_result > 0)
+			{
+				is_exporting = true;
+				export_yolov5_format = (format_result == 2);
+				runThread(); // calls run() and waits for it to be done
+				dm::Log("forcing the window to close");
+				closeButtonPressed();
+			}
+			else
+			{
+				// cancelled format selection
+				setEnabled(true);
+			}
 		}
 		else
 		{
@@ -435,6 +457,165 @@ void dm::ClassIdWnd::run_export()
 }
 
 
+void dm::ClassIdWnd::run_export_yolov5()
+{
+	const std::filesystem::path source = dir.getFullPathName().toStdString();
+	const std::filesystem::path target = (source.string() + "_yolov5_export_" + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
+	export_directory = target;
+
+	Log("YOLOv5 export dataset src=" + source.string());
+	Log("YOLOv5 export dataset dst=" + target.string());
+
+	setStatusMessage("Exporting files to YOLOv5 format: " + target.string() + "...");
+
+	// Create YOLOv5 directory structure
+	const std::filesystem::path train_images_dir = target / "images" / "train";
+	const std::filesystem::path val_images_dir = target / "images" / "val";
+	const std::filesystem::path train_labels_dir = target / "labels" / "train";
+	const std::filesystem::path val_labels_dir = target / "labels" / "val";
+
+	std::error_code ec;
+	std::filesystem::create_directories(train_images_dir, ec);
+	std::filesystem::create_directories(val_images_dir, ec);
+	std::filesystem::create_directories(train_labels_dir, ec);
+	std::filesystem::create_directories(val_labels_dir, ec);
+
+	if (ec)
+	{
+		Log("Failed to create YOLOv5 directory structure: " + ec.message());
+		return;
+	}
+
+	// Analyze and pair image/label files
+	std::map<std::string, std::filesystem::path> image_map;
+	std::map<std::string, std::filesystem::path> label_map;
+
+	// Build maps of normalized keys to full paths
+	for (const auto& image_path : all_images)
+	{
+		std::filesystem::path img_path(image_path);
+		std::filesystem::path rel_path = std::filesystem::relative(img_path, source);
+		
+		// Remove 'images' and 'labels' from path components for key
+		std::string key = rel_path.stem().string(); // Remove extension
+		std::string path_str = rel_path.string();
+		
+		// Simple approach: use filename without extension as key
+		image_map[key] = img_path;
+	}
+
+	// Find corresponding label files
+	for (const auto& [key, image_path] : image_map)
+	{
+		std::filesystem::path txt_path = std::filesystem::path(image_path).replace_extension(".txt");
+		if (std::filesystem::exists(txt_path))
+		{
+			label_map[key] = txt_path;
+		}
+	}
+
+	// Determine valid pairs and copy files
+	VStr valid_keys;
+	for (const auto& [key, image_path] : image_map)
+	{
+		if (export_all_images || label_map.count(key))
+		{
+			valid_keys.push_back(key);
+		}
+	}
+
+	double work_completed = 0.0f;
+	const double work_to_be_done = valid_keys.size();
+
+	for (const auto& key : valid_keys)
+	{
+		if (threadShouldExit()) break;
+
+		setProgress(work_completed / work_to_be_done);
+		work_completed++;
+
+		const auto& image_path = image_map[key];
+		
+		// Determine if this is train or val based on path
+		bool is_train = true; // Default to train
+		std::string path_str = image_path.string();
+		if (path_str.find("val") != std::string::npos || path_str.find("valid") != std::string::npos)
+		{
+			is_train = false;
+		}
+
+		// Generate unique filename
+		std::string base_name = std::filesystem::path(image_path).stem().string();
+		std::string extension = std::filesystem::path(image_path).extension().string();
+		
+		// Create prefix from parent directory name for uniqueness
+		std::string prefix = "data";
+		std::filesystem::path parent = image_path.parent_path();
+		if (!parent.empty() && parent != source)
+		{
+			std::string parent_name = parent.filename().string();
+			// Sanitize parent name for filename use
+			std::string safe_prefix;
+			for (char c : parent_name)
+			{
+				if (std::isalnum(c) || c == '_')
+					safe_prefix += c;
+			}
+			if (!safe_prefix.empty())
+				prefix = safe_prefix;
+		}
+
+		// Generate unique ID (simplified compared to UUID)
+		auto now = std::chrono::high_resolution_clock::now();
+		auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+		std::string unique_id = std::to_string(timestamp).substr(8); // Last 8 digits
+
+		std::string new_image_filename = prefix + "_" + unique_id + "_" + base_name + extension;
+		std::string new_label_filename = prefix + "_" + unique_id + "_" + base_name + ".txt";
+
+		// Copy image file
+		std::filesystem::path dest_image_path = is_train ? train_images_dir / new_image_filename : val_images_dir / new_image_filename;
+		std::filesystem::copy_file(image_path, dest_image_path, ec);
+		if (ec)
+		{
+			Log("Failed to copy image " + image_path.string() + ": " + ec.message());
+			continue;
+		}
+
+		// Copy label file if it exists
+		if (label_map.count(key))
+		{
+			std::filesystem::path label_path = label_map[key];
+			std::filesystem::path dest_label_path = is_train ? train_labels_dir / new_label_filename : val_labels_dir / new_label_filename;
+			std::filesystem::copy_file(label_path, dest_label_path, ec);
+			if (ec)
+			{
+				Log("Failed to copy label " + label_path.string() + ": " + ec.message());
+			}
+		}
+
+		number_of_files_copied++;
+	}
+
+	// Generate dataset.yaml
+	generate_dataset_yaml(target);
+
+	// Copy .cfg files (for compatibility)
+	for (const auto & entry : std::filesystem::directory_iterator(source))
+	{
+		if (entry.is_regular_file() and
+			entry.file_size() > 0 and
+			entry.path().extension() == ".cfg")
+		{
+			const std::filesystem::path dst = target / entry.path().filename();
+			std::filesystem::copy_file(entry.path(), dst, ec);
+		}
+	}
+
+	return;
+}
+
+
 void dm::ClassIdWnd::run()
 {
 	setEnabled(false);
@@ -464,7 +645,14 @@ void dm::ClassIdWnd::run()
 
 	if (is_exporting)
 	{
-		run_export();
+		if (export_yolov5_format)
+		{
+			run_export_yolov5();
+		}
+		else
+		{
+			run_export();
+		}
 	}
 
 	std::ofstream ofs(names_fn);
@@ -1147,4 +1335,62 @@ void dm::ClassIdWnd::count_images_and_marks()
 		", images="				+ std::to_string(all_images.size())		);
 
 	return;
+}
+
+
+void dm::ClassIdWnd::generate_dataset_yaml(const std::filesystem::path & output_folder)
+{
+	// Read class names from .names file
+	std::vector<std::string> class_names;
+	std::ifstream ifs(names_fn);
+	if (ifs.good())
+	{
+		std::string line;
+		while (std::getline(ifs, line))
+		{
+			// Remove any trailing whitespace
+			while (!line.empty() && std::isspace(line.back()))
+			{
+				line.pop_back();
+			}
+			if (!line.empty())
+			{
+				class_names.push_back(line);
+			}
+		}
+		ifs.close();
+	}
+	else
+	{
+		Log("Warning: Could not read .names file for dataset.yaml generation");
+		return;
+	}
+
+	// Generate dataset.yaml
+	std::filesystem::path yaml_path = output_folder / "dataset.yaml";
+	std::ofstream ofs(yaml_path);
+	if (ofs.good())
+	{
+		// Write YAML content
+		ofs << "# YOLOv5 Dataset Configuration\n";
+		ofs << "# Generated by DarkMark v" << DARKMARK_VERSION << "\n";
+		ofs << "# " << Time::getCurrentTime().formatted("%a %Y-%m-%d %H:%M:%S %Z").toStdString() << "\n\n";
+		
+		ofs << "path: " << std::filesystem::absolute(output_folder).string() << "\n";
+		ofs << "train: images/train\n";
+		ofs << "val: images/val\n\n";
+		
+		ofs << "names:\n";
+		for (size_t i = 0; i < class_names.size(); ++i)
+		{
+			ofs << "  " << i << ": " << class_names[i] << "\n";
+		}
+		
+		ofs.close();
+		Log("Generated dataset.yaml with " + std::to_string(class_names.size()) + " classes");
+	}
+	else
+	{
+		Log("Error: Failed to write dataset.yaml file");
+	}
 }

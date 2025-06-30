@@ -58,6 +58,8 @@ namespace dm
 			virtual String getCellTooltip(int rowNumber, int columnId) override;
 
 			void run_export();
+			void run_export_yolov5();
+			void generate_dataset_yaml(const std::filesystem::path & output_folder);
 
 			void rebuild_table();
 
@@ -109,6 +111,7 @@ namespace dm
 
 			bool is_exporting;
 			bool export_all_images;
+			bool export_yolov5_format;
 			bool names_file_rewritten;
 			size_t number_of_annotations_deleted;
 			size_t number_of_annotations_remapped;
