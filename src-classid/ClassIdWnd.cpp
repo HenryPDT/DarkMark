@@ -486,6 +486,43 @@ void dm::ClassIdWnd::run_export()
 }
 
 
+std::string dm::ClassIdWnd::generate_unique_filename(const std::filesystem::path& image_path, const std::filesystem::path& source)
+{
+	// Get relative path from source
+	std::filesystem::path rel_path = std::filesystem::relative(image_path, source);
+	
+	// Convert path to string and replace directory separators with underscores
+	std::string path_str = rel_path.string();
+	
+	// Remove common directory names that don't add value
+	std::vector<std::string> to_remove = {"train/", "val/", "valid/", "images/", "labels/"};
+	for (const auto& remove_str : to_remove)
+	{
+		size_t pos = 0;
+		while ((pos = path_str.find(remove_str, pos)) != std::string::npos)
+		{
+			path_str.erase(pos, remove_str.length());
+		}
+	}
+	
+	// Replace remaining directory separators and dots with underscores
+	std::replace(path_str.begin(), path_str.end(), '/', '_');
+	std::replace(path_str.begin(), path_str.end(), '\\', '_');
+	std::replace(path_str.begin(), path_str.end(), '.', '_');
+	
+	// Get the original extension
+	std::string extension = image_path.extension().string();
+	
+	// Remove any trailing underscores and add extension back
+	while (!path_str.empty() && path_str.back() == '_')
+	{
+		path_str.pop_back();
+	}
+	
+	return path_str + extension;
+}
+
+
 void dm::ClassIdWnd::run_export_yolov5()
 {
 	const std::filesystem::path source = dir.getFullPathName().toStdString();
@@ -525,9 +562,8 @@ void dm::ClassIdWnd::run_export_yolov5()
 		std::filesystem::path img_path(image_path);
 		std::filesystem::path rel_path = std::filesystem::relative(img_path, source);
 		
-		// Remove 'images' and 'labels' from path components for key
-		std::string key = rel_path.stem().string(); // Remove extension
-		std::string path_str = rel_path.string();
+		// Use relative path without extension as key to avoid collisions between train/val folders
+		std::string key = rel_path.replace_extension("").string();
 		
 		// Simple approach: use filename without extension as key
 		image_map[key] = img_path;
@@ -573,34 +609,9 @@ void dm::ClassIdWnd::run_export_yolov5()
 			is_train = false;
 		}
 
-		// Generate unique filename
-		std::string base_name = std::filesystem::path(image_path).stem().string();
-		std::string extension = std::filesystem::path(image_path).extension().string();
-		
-		// Create prefix from parent directory name for uniqueness
-		std::string prefix = "data";
-		std::filesystem::path parent = image_path.parent_path();
-		if (!parent.empty() && parent != source)
-		{
-			std::string parent_name = parent.filename().string();
-			// Sanitize parent name for filename use
-			std::string safe_prefix;
-			for (char c : parent_name)
-			{
-				if (std::isalnum(c) || c == '_')
-					safe_prefix += c;
-			}
-			if (!safe_prefix.empty())
-				prefix = safe_prefix;
-		}
-
-		// Generate unique ID (simplified compared to UUID)
-		auto now = std::chrono::high_resolution_clock::now();
-		auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
-		std::string unique_id = std::to_string(timestamp).substr(8); // Last 8 digits
-
-		std::string new_image_filename = prefix + "_" + unique_id + "_" + base_name + extension;
-		std::string new_label_filename = prefix + "_" + unique_id + "_" + base_name + ".txt";
+		// Generate unique filename based on relative path
+		std::string new_image_filename = generate_unique_filename(image_path, source);
+		std::string new_label_filename = std::filesystem::path(new_image_filename).replace_extension(".txt").string();
 
 		// Copy image file
 		std::filesystem::path dest_image_path = is_train ? train_images_dir / new_image_filename : val_images_dir / new_image_filename;
@@ -1432,7 +1443,12 @@ void dm::ClassIdWnd::run_export_coco()
 	for (const auto& image_path : all_images)
 	{
 		std::filesystem::path img_path(image_path);
-		std::string key = img_path.stem().string(); // Remove extension
+		std::filesystem::path rel_path = std::filesystem::relative(img_path, source);
+		
+		// Use relative path without extension as key to avoid collisions between train/val folders
+		std::string key = rel_path.replace_extension("").string();
+		
+		// Simple approach: use filename without extension as key
 		image_map[key] = img_path;
 	}
 
@@ -1475,9 +1491,9 @@ void dm::ClassIdWnd::run_export_coco()
 	const double work_to_be_done = train_images.size() + val_images.size();
 
 	// Generate COCO JSON files
-	generate_coco_json(train_images, label_map, class_names, train_images_dir, annotations_dir / "instances_train2017.json", "train", work_completed, work_to_be_done);
+	generate_coco_json(train_images, label_map, class_names, train_images_dir, annotations_dir / "instances_train2017.json", "train", source, work_completed, work_to_be_done);
 	work_completed += train_images.size();
-	generate_coco_json(val_images, label_map, class_names, val_images_dir, annotations_dir / "instances_val2017.json", "val", work_completed, work_to_be_done);
+	generate_coco_json(val_images, label_map, class_names, val_images_dir, annotations_dir / "instances_val2017.json", "val", source, work_completed, work_to_be_done);
 
 	// Copy .cfg files (for compatibility)
 	for (const auto & entry : std::filesystem::directory_iterator(source))
@@ -1501,6 +1517,7 @@ void dm::ClassIdWnd::generate_coco_json(const std::vector<std::pair<std::string,
 										const std::filesystem::path& target_img_dir,
 										const std::filesystem::path& json_path,
 										const std::string& mode,
+										const std::filesystem::path& source,
 										double& work_completed,
 										const double work_to_be_done)
 {
@@ -1569,8 +1586,8 @@ void dm::ClassIdWnd::generate_coco_json(const std::vector<std::pair<std::string,
 		int width = juce_image.getWidth();
 		int height = juce_image.getHeight();
 		
-		// Copy image to target directory
-		std::string filename = image_path.filename().string();
+		// Generate unique filename and copy image to target directory
+		std::string filename = generate_unique_filename(image_path, source);
 		std::filesystem::path dest_img_path = target_img_dir / filename;
 		std::error_code ec;
 		std::filesystem::copy_file(image_path, dest_img_path, ec);
@@ -1636,8 +1653,7 @@ void dm::ClassIdWnd::generate_coco_json(const std::vector<std::pair<std::string,
 						ann_stream << "      \"category_id\": " << (class_id + 1) << ",\n";
 						ann_stream << "      \"bbox\": [" << x0 << ", " << y0 << ", " << bbox_w << ", " << bbox_h << "],\n";
 						ann_stream << "      \"area\": " << area << ",\n";
-						ann_stream << "      \"iscrowd\": 0,\n";
-						ann_stream << "      \"segmentation\": [[" << x0 << ", " << y0 << ", " << x1 << ", " << y0 << ", " << x1 << ", " << y1 << ", " << x0 << ", " << y1 << "]]\n";
+						ann_stream << "      \"iscrowd\": 0\n";
 						ann_stream << "    }";
 						
 						annotations_json.push_back(ann_stream.str());

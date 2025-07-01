@@ -60,6 +60,7 @@ namespace dm
 			void run_export();
 			void run_export_yolov5();
 			void run_export_coco();
+			std::string generate_unique_filename(const std::filesystem::path& image_path, const std::filesystem::path& source);
 			void generate_dataset_yaml(const std::filesystem::path & output_folder);
 			void generate_coco_json(const std::vector<std::pair<std::string, std::filesystem::path>>& images, 
 									const std::map<std::string, std::filesystem::path>& label_map,
@@ -67,6 +68,7 @@ namespace dm
 									const std::filesystem::path& target_img_dir,
 									const std::filesystem::path& json_path,
 									const std::string& mode,
+									const std::filesystem::path& source,
 									double& work_completed,
 									const double work_to_be_done);
 
