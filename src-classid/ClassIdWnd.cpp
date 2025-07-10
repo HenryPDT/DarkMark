@@ -1492,7 +1492,6 @@ void dm::ClassIdWnd::run_export_coco()
 
 	// Generate COCO JSON files
 	generate_coco_json(train_images, label_map, class_names, train_images_dir, annotations_dir / "instances_train2017.json", "train", source, work_completed, work_to_be_done);
-	work_completed += train_images.size();
 	generate_coco_json(val_images, label_map, class_names, val_images_dir, annotations_dir / "instances_val2017.json", "val", source, work_completed, work_to_be_done);
 
 	// Copy .cfg files (for compatibility)
