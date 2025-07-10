@@ -2,6 +2,7 @@
 
 #include "DarkMark.hpp"
 #include <iomanip>
+#include <optional>
 #include <random>
 
 
@@ -11,6 +12,9 @@ dm::SplitDialog::SplitDialog() :
 	txt_train_percentage("", "Training %:"),
 	sl_train_percentage(Slider::SliderStyle::LinearHorizontal, Slider::TextEntryBoxPosition::TextBoxRight),
 	txt_val_percentage("", "Validation %: 20.0"),
+	lbl_seed("", "Seed (optional):"),
+	txt_seed(),
+	help_seed("", "Leave empty for random split, or enter a number for reproducible split"),
 	ok_button("OK"),
 	cancel_button("Cancel"),
 	ok_pressed(false)
@@ -24,6 +28,9 @@ dm::SplitDialog::SplitDialog() :
 	canvas.addAndMakeVisible(txt_train_percentage);
 	canvas.addAndMakeVisible(sl_train_percentage);
 	canvas.addAndMakeVisible(txt_val_percentage);
+	canvas.addAndMakeVisible(lbl_seed);
+	canvas.addAndMakeVisible(txt_seed);
+	canvas.addAndMakeVisible(help_seed);
 	canvas.addAndMakeVisible(ok_button);
 	canvas.addAndMakeVisible(cancel_button);
 
@@ -39,6 +46,16 @@ dm::SplitDialog::SplitDialog() :
 		txt_val_percentage.setText("Validation %: " + String(val_pct, 1), NotificationType::dontSendNotification);
 	};
 
+	// Configure seed input
+	txt_seed.setMultiLine(false);
+	txt_seed.setReturnKeyStartsNewLine(false);
+	txt_seed.setInputFilter(new TextEditor::LengthAndCharacterRestriction(10, "0123456789"), true);
+	txt_seed.setTooltip("Enter a numeric seed for reproducible splits, or leave empty for random");
+	
+	// Style the help text
+	help_seed.setFont(Font(12.0f, Font::italic));
+	help_seed.setColour(Label::textColourId, Colours::lightgrey);
+
 	ok_button.addListener(this);
 	cancel_button.addListener(this);
 
@@ -49,7 +66,7 @@ dm::SplitDialog::SplitDialog() :
 		peer->setIcon(DarkMarkLogo());
 	}
 
-	centreWithSize(400, 200);
+	centreWithSize(450, 280);
 	setVisible(true);
 }
 
@@ -90,6 +107,17 @@ void dm::SplitDialog::resized()
 	fb_rows.items.add(FlexItem(fb_train).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, 0, 0)));
 
 	fb_rows.items.add(FlexItem(txt_val_percentage).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, margin_size, 0)));
+
+	// Add seed input row
+	FlexBox fb_seed;
+	fb_seed.flexDirection = FlexBox::Direction::row;
+	fb_seed.justifyContent = FlexBox::JustifyContent::flexStart;
+	fb_seed.items.add(FlexItem(lbl_seed).withWidth(100.0f).withHeight(height));
+	fb_seed.items.add(FlexItem(txt_seed).withWidth(200.0f).withHeight(height));
+	fb_rows.items.add(FlexItem(fb_seed).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, 0, 0)));
+
+	// Add help text
+	fb_rows.items.add(FlexItem(help_seed).withHeight(height).withMargin(FlexItem::Margin(5, 0, margin_size, 0)));
 
 	FlexBox button_row;
 	button_row.flexDirection = FlexBox::Direction::row;
@@ -477,7 +505,16 @@ void dm::ClassIdWnd::buttonClicked(Button * button)
 		if (dialog.wasOkPressed())
 		{
 			train_percentage = dialog.getTrainPercentage();
-			dm::Log("Selected train percentage: " + std::to_string(train_percentage));
+			if (dialog.hasSeed())
+			{
+				split_seed = dialog.getSeed();
+				dm::Log("Selected train percentage: " + std::to_string(train_percentage) + ", seed: " + std::to_string(*split_seed));
+			}
+			else
+			{
+				split_seed = std::nullopt;
+				dm::Log("Selected train percentage: " + std::to_string(train_percentage) + ", random seed");
+			}
 			is_splitting = true;
 			runThread(); // calls run() and waits for it to be done
 			dm::Log("forcing the window to close");
@@ -2019,8 +2056,20 @@ void dm::ClassIdWnd::run_split()
 		}
 
 		// Shuffle the files for random distribution
-		std::random_device rd;
-		std::mt19937 g(rd());
+		std::mt19937 g;
+		if (split_seed.has_value())
+		{
+			// Use deterministic seed for reproducible splits
+			g.seed(*split_seed);
+			Log("Using deterministic seed " + std::to_string(*split_seed) + " for " + subdir_name);
+		}
+		else
+		{
+			// Use random seed
+			std::random_device rd;
+			g.seed(rd());
+			Log("Using random seed for " + subdir_name);
+		}
 		std::shuffle(image_files.begin(), image_files.end(), g);
 
 		// Calculate split counts

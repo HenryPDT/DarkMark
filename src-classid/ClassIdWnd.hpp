@@ -3,6 +3,7 @@
 #pragma once
 
 #include "DarkMark.hpp"
+#include <optional>
 
 
 namespace dm
@@ -19,6 +20,8 @@ namespace dm
 			virtual void buttonClicked(Button * button) override;
 			
 			double getTrainPercentage() const { return sl_train_percentage.getValue(); }
+			int getSeed() const { return static_cast<int>(txt_seed.getText().getIntValue()); }
+			bool hasSeed() const { return !txt_seed.getText().isEmpty(); }
 			bool wasOkPressed() const { return ok_pressed; }
 			
 		private:
@@ -27,6 +30,9 @@ namespace dm
 			Label txt_train_percentage;
 			Slider sl_train_percentage;
 			Label txt_val_percentage;
+			Label lbl_seed;
+			TextEditor txt_seed;
+			Label help_seed;
 			TextButton ok_button;
 			TextButton cancel_button;
 			bool ok_pressed;
@@ -162,6 +168,7 @@ namespace dm
 			// Split functionality variables
 			bool is_splitting;
 			double train_percentage;
+			std::optional<int> split_seed;
 			std::filesystem::path split_directory;
 	};
 }
