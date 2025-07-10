@@ -7,6 +7,31 @@
 
 namespace dm
 {
+	class SplitDialog : public DocumentWindow, public Button::Listener
+	{
+		public:
+			SplitDialog();
+			virtual ~SplitDialog();
+			
+			virtual void closeButtonPressed() override;
+			virtual void userTriedToCloseWindow() override;
+			virtual void resized() override;
+			virtual void buttonClicked(Button * button) override;
+			
+			double getTrainPercentage() const { return sl_train_percentage.getValue(); }
+			bool wasOkPressed() const { return ok_pressed; }
+			
+		private:
+			Component canvas;
+			Label header_message;
+			Label txt_train_percentage;
+			Slider sl_train_percentage;
+			Label txt_val_percentage;
+			TextButton ok_button;
+			TextButton cancel_button;
+			bool ok_pressed;
+	};
+
 	class ClassIdWnd : public DocumentWindow, public Button::Listener, public ThreadWithProgressWindow, public TableListBoxModel
 	{
 		public:
@@ -60,6 +85,7 @@ namespace dm
 			void run_export();
 			void run_export_yolov5();
 			void run_export_coco();
+			void run_split();
 			std::string generate_unique_filename(const std::filesystem::path& image_path, const std::filesystem::path& source);
 			void generate_dataset_yaml(const std::filesystem::path & output_folder);
 			void generate_coco_json(const std::vector<std::pair<std::string, std::filesystem::path>>& images, 
@@ -106,6 +132,7 @@ namespace dm
 			ArrowButton up_button;
 			ArrowButton down_button;
 			TextButton export_button;
+			TextButton split_button;
 			TextButton apply_button;
 			TextButton cancel_button;
 
@@ -131,5 +158,10 @@ namespace dm
 			size_t number_of_files_copied;
 
 			std::filesystem::path export_directory;
+
+			// Split functionality variables
+			bool is_splitting;
+			double train_percentage;
+			std::filesystem::path split_directory;
 	};
 }

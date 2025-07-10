@@ -2,6 +2,122 @@
 
 #include "DarkMark.hpp"
 #include <iomanip>
+#include <random>
+
+
+dm::SplitDialog::SplitDialog() :
+	DocumentWindow("DarkMark - Split Dataset", Colours::darkgrey, TitleBarButtons::closeButton),
+	header_message("", "Select the percentage split for training vs validation data:"),
+	txt_train_percentage("", "Training %:"),
+	sl_train_percentage(Slider::SliderStyle::LinearHorizontal, Slider::TextEntryBoxPosition::TextBoxRight),
+	txt_val_percentage("", "Validation %: 20.0"),
+	ok_button("OK"),
+	cancel_button("Cancel"),
+	ok_pressed(false)
+{
+	setContentNonOwned(&canvas, true);
+	setUsingNativeTitleBar(true);
+	setResizable(false, false);
+	setDropShadowEnabled(true);
+
+	canvas.addAndMakeVisible(header_message);
+	canvas.addAndMakeVisible(txt_train_percentage);
+	canvas.addAndMakeVisible(sl_train_percentage);
+	canvas.addAndMakeVisible(txt_val_percentage);
+	canvas.addAndMakeVisible(ok_button);
+	canvas.addAndMakeVisible(cancel_button);
+
+	// Set up the slider like in VideoImportWindow
+	sl_train_percentage.setRange(50.0, 95.0, 1.0);
+	sl_train_percentage.setNumDecimalPlacesToDisplay(0);
+	sl_train_percentage.setValue(80.0); // Default 80% training, 20% validation
+	
+	// Add slider listener to update validation percentage display
+	sl_train_percentage.onValueChange = [this]() {
+		double train_pct = sl_train_percentage.getValue();
+		double val_pct = 100.0 - train_pct;
+		txt_val_percentage.setText("Validation %: " + String(val_pct, 1), NotificationType::dontSendNotification);
+	};
+
+	ok_button.addListener(this);
+	cancel_button.addListener(this);
+
+	setIcon(DarkMarkLogo());
+	ComponentPeer *peer = getPeer();
+	if (peer)
+	{
+		peer->setIcon(DarkMarkLogo());
+	}
+
+	centreWithSize(400, 200);
+	setVisible(true);
+}
+
+dm::SplitDialog::~SplitDialog()
+{
+}
+
+void dm::SplitDialog::closeButtonPressed()
+{
+	setVisible(false);
+	exitModalState(0);
+}
+
+void dm::SplitDialog::userTriedToCloseWindow()
+{
+	closeButtonPressed();
+}
+
+void dm::SplitDialog::resized()
+{
+	DocumentWindow::resized();
+
+	const auto height = 25.0f;
+	const auto margin_size = 10;
+
+	FlexBox fb_rows;
+	fb_rows.flexDirection = FlexBox::Direction::column;
+	fb_rows.alignItems = FlexBox::AlignItems::stretch;
+	fb_rows.justifyContent = FlexBox::JustifyContent::flexStart;
+
+	fb_rows.items.add(FlexItem(header_message).withHeight(height * 2).withMargin(FlexItem::Margin(margin_size, 0, margin_size, 0)));
+	
+	FlexBox fb_train;
+	fb_train.flexDirection = FlexBox::Direction::row;
+	fb_train.justifyContent = FlexBox::JustifyContent::flexStart;
+	fb_train.items.add(FlexItem(txt_train_percentage).withWidth(100.0f).withHeight(height));
+	fb_train.items.add(FlexItem(sl_train_percentage).withWidth(200.0f).withHeight(height));
+	fb_rows.items.add(FlexItem(fb_train).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, 0, 0)));
+
+	fb_rows.items.add(FlexItem(txt_val_percentage).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, margin_size, 0)));
+
+	FlexBox button_row;
+	button_row.flexDirection = FlexBox::Direction::row;
+	button_row.justifyContent = FlexBox::JustifyContent::flexEnd;
+	button_row.items.add(FlexItem().withFlex(1.0));
+	button_row.items.add(FlexItem(cancel_button).withWidth(80.0).withMargin(FlexItem::Margin(0, margin_size, 0, 0)));
+	button_row.items.add(FlexItem(ok_button).withWidth(80.0));
+
+	fb_rows.items.add(FlexItem().withFlex(1.0));
+	fb_rows.items.add(FlexItem(button_row).withHeight(30.0).withMargin(FlexItem::Margin(0, 0, margin_size, 0)));
+
+	auto r = getLocalBounds();
+	r.reduce(margin_size, margin_size);
+	fb_rows.performLayout(r);
+}
+
+void dm::SplitDialog::buttonClicked(Button * button)
+{
+	if (button == &ok_button)
+	{
+		ok_pressed = true;
+		closeButtonPressed();
+	}
+	else if (button == &cancel_button)
+	{
+		closeButtonPressed();
+	}
+}
 
 
 dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
@@ -15,6 +131,7 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	up_button				("up"	, 0.75f, Colours::lightblue),
 	down_button				("down"	, 0.25f, Colours::lightblue),
 	export_button			("Export..."),
+	split_button			("Split..."),
 	apply_button			("Apply..."),
 	cancel_button			("Cancel"),
 	done_looking_for_images	(false),
@@ -26,7 +143,9 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	number_of_annotations_deleted(0),
 	number_of_annotations_remapped(0),
 	number_of_txt_files_rewritten(0),
-	number_of_files_copied	(0)
+	number_of_files_copied	(0),
+	is_splitting			(false),
+	train_percentage		(80.0)
 {
 	setContentNonOwned		(&canvas, true	);
 	setUsingNativeTitleBar	(true			);
@@ -38,6 +157,7 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	canvas.addAndMakeVisible(up_button);
 	canvas.addAndMakeVisible(down_button);
 	canvas.addAndMakeVisible(export_button);
+	canvas.addAndMakeVisible(split_button);
 	canvas.addAndMakeVisible(apply_button);
 	canvas.addAndMakeVisible(cancel_button);
 
@@ -57,6 +177,7 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	up_button		.setTooltip("Move the selected class up.");
 	down_button		.setTooltip("Move the selected class down.");
 	export_button	.setTooltip("Export the entire dataset -- including the images -- with the changes shown above to a brand new project.  The current dataset will remain unchanged.");
+	split_button	.setTooltip("Split the dataset into train and validation sets by folder with configurable percentage split.");
 	apply_button	.setTooltip("Apply the changes shown above to the current dataset.");
 
 	up_button		.setVisible(false);
@@ -66,6 +187,7 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	up_button		.addListener(this);
 	down_button		.addListener(this);
 	export_button	.addListener(this);
+	split_button	.addListener(this);
 	apply_button	.addListener(this);
 	cancel_button	.addListener(this);
 
@@ -174,6 +296,18 @@ void dm::ClassIdWnd::closeButtonPressed()
 					"Number of annotations remapped: "	+ String(number_of_annotations_remapped	) + "\n"
 					"Number of .txt files modified: "	+ String(number_of_txt_files_rewritten	) + "\n");
 		}
+		else if (is_splitting)
+		{
+			AlertWindow::showMessageBoxAsync(MessageBoxIconType::InfoIcon,
+					getTitle(),
+					"The dataset has been split to:\n"
+					"\n" +
+					String(split_directory.c_str()) + "\n"
+					"\n"
+					"Train percentage: "				+ String(train_percentage, 1) + "%\n"
+					"Validation percentage: "			+ String(100.0 - train_percentage, 1) + "%\n"
+					"Number of files copied: "			+ String(number_of_files_copied) + "\n");
+		}
 		else  if (names_file_rewritten)
 		{
 			dmapp().startup_wnd->refresh_button.triggerClick();
@@ -224,6 +358,8 @@ void dm::ClassIdWnd::resized()
 	button_row.items.add(FlexItem(down_button)		.withWidth(50.0));
 	button_row.items.add(FlexItem()					.withFlex(1.0));
 	button_row.items.add(FlexItem(export_button)	.withWidth(100.0));
+	button_row.items.add(FlexItem()					.withWidth(margin_size));
+	button_row.items.add(FlexItem(split_button)		.withWidth(100.0));
 	button_row.items.add(FlexItem()					.withWidth(margin_size));
 	button_row.items.add(FlexItem(apply_button)		.withWidth(100.0));
 	button_row.items.add(FlexItem()					.withWidth(margin_size));
@@ -322,6 +458,30 @@ void dm::ClassIdWnd::buttonClicked(Button * button)
 				// cancelled format selection
 				setEnabled(true);
 			}
+		}
+		else
+		{
+			// cancelled action
+			setEnabled(true);
+		}
+	}
+	else if (button == &split_button)
+	{
+		dm::Log("split button has been pressed!");
+		setEnabled(false);
+
+		// Create and show the split dialog with slider
+		SplitDialog dialog;
+		dialog.runModalLoop();
+		
+		if (dialog.wasOkPressed())
+		{
+			train_percentage = dialog.getTrainPercentage();
+			dm::Log("Selected train percentage: " + std::to_string(train_percentage));
+			is_splitting = true;
+			runThread(); // calls run() and waits for it to be done
+			dm::Log("forcing the window to close");
+			closeButtonPressed();
 		}
 		else
 		{
@@ -697,6 +857,10 @@ void dm::ClassIdWnd::run()
 		{
 			run_export();
 		}
+	}
+	else if (is_splitting)
+	{
+		run_split();
 	}
 
 	std::ofstream ofs(names_fn);
@@ -1747,4 +1911,170 @@ void dm::ClassIdWnd::generate_dataset_yaml(const std::filesystem::path & output_
 	{
 		Log("Error: Failed to write dataset.yaml file");
 	}
+}
+
+
+void dm::ClassIdWnd::run_split()
+{
+	const std::filesystem::path source = dir.getFullPathName().toStdString();
+	const std::filesystem::path target = (source.string() + "_split_" + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
+	split_directory = target;
+
+	Log("split dataset src=" + source.string());
+	Log("split dataset dst=" + target.string());
+	Log("train percentage=" + std::to_string(train_percentage));
+
+	setStatusMessage("Splitting dataset to " + target.string() + "...");
+
+	// Copy the .names file to the split directory
+	std::filesystem::path names_source = names_fn;
+	std::filesystem::path names_target = target / names_source.filename();
+	std::error_code ec;
+	std::filesystem::create_directories(target, ec);
+	if (ec)
+	{
+		Log("Failed to create split directory: " + ec.message());
+		return;
+	}
+	
+	std::filesystem::copy_file(names_source, names_target, ec);
+	if (ec)
+	{
+		Log("Failed to copy .names file: " + ec.message());
+	}
+
+	// Find all subdirectories in the source directory
+	std::vector<std::filesystem::path> subdirs;
+	for (const auto& entry : std::filesystem::directory_iterator(source))
+	{
+		if (entry.is_directory())
+		{
+			subdirs.push_back(entry.path());
+		}
+	}
+
+	if (subdirs.empty())
+	{
+		Log("No subdirectories found in source directory");
+		return;
+	}
+
+	double total_work = 0.0;
+	// Count total files for progress tracking
+	for (const auto& subdir : subdirs)
+	{
+		for (const auto& entry : std::filesystem::directory_iterator(subdir))
+		{
+			if (entry.is_regular_file())
+			{
+				const auto ext = entry.path().extension().string();
+				if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp")
+				{
+					total_work += 1.0;
+				}
+			}
+		}
+	}
+
+	double work_completed = 0.0;
+	
+	// Process each subdirectory
+	for (const auto& subdir : subdirs)
+	{
+		if (threadShouldExit()) break;
+
+		const std::string subdir_name = subdir.filename().string();
+		Log("Processing subdirectory: " + subdir_name);
+
+		// Create train and val directories for this subdirectory
+		const std::filesystem::path train_dir = target / subdir_name / "train";
+		const std::filesystem::path val_dir = target / subdir_name / "val";
+		
+		std::filesystem::create_directories(train_dir, ec);
+		std::filesystem::create_directories(val_dir, ec);
+		if (ec)
+		{
+			Log("Failed to create directories for " + subdir_name + ": " + ec.message());
+			continue;
+		}
+
+		// Collect all image files in this subdirectory
+		std::vector<std::filesystem::path> image_files;
+		for (const auto& entry : std::filesystem::directory_iterator(subdir))
+		{
+			if (entry.is_regular_file())
+			{
+				const auto ext = entry.path().extension().string();
+				if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp")
+				{
+					image_files.push_back(entry.path());
+				}
+			}
+		}
+
+		if (image_files.empty())
+		{
+			Log("No image files found in " + subdir_name);
+			continue;
+		}
+
+		// Shuffle the files for random distribution
+		std::random_device rd;
+		std::mt19937 g(rd());
+		std::shuffle(image_files.begin(), image_files.end(), g);
+
+		// Calculate split counts
+		const size_t total_images = image_files.size();
+		const size_t train_count = static_cast<size_t>(total_images * train_percentage / 100.0);
+		const size_t val_count = total_images - train_count;
+
+		Log("Splitting " + subdir_name + ": " + std::to_string(train_count) + " train, " + std::to_string(val_count) + " val");
+
+		// Copy files to train and val directories
+		for (size_t i = 0; i < image_files.size(); ++i)
+		{
+			if (threadShouldExit()) break;
+
+			setProgress(work_completed / total_work);
+			work_completed += 1.0;
+
+			const auto& image_path = image_files[i];
+			const bool to_train = (i < train_count);
+			const std::filesystem::path dest_dir = to_train ? train_dir : val_dir;
+			const std::filesystem::path dest_path = dest_dir / image_path.filename();
+
+			// Copy image file
+			std::filesystem::copy_file(image_path, dest_path, ec);
+			if (ec)
+			{
+				Log("Failed to copy image " + image_path.string() + ": " + ec.message());
+				continue;
+			}
+
+			number_of_files_copied++;
+
+			// Copy corresponding annotation files (.txt and .json if they exist)
+			std::vector<std::string> annotation_extensions = {".txt", ".json"};
+			for (const auto& ext : annotation_extensions)
+			{
+				const auto annotation_path = std::filesystem::path(image_path).replace_extension(ext);
+				if (std::filesystem::exists(annotation_path))
+				{
+					const auto dest_annotation_path = dest_dir / annotation_path.filename();
+					std::filesystem::copy_file(annotation_path, dest_annotation_path, ec);
+					if (ec)
+					{
+						Log("Failed to copy annotation " + annotation_path.string() + ": " + ec.message());
+					}
+					else
+					{
+						number_of_files_copied++;
+					}
+				}
+			}
+		}
+	}
+
+	Log("Split complete. Total files copied: " + std::to_string(number_of_files_copied));
+	return;
 }
