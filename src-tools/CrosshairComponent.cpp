@@ -253,8 +253,8 @@ void dm::CrosshairComponent::mouseUp(const MouseEvent & event)
 	if (mouse_drag_is_enabled and mouse_drag_rectangle != invalid_rectangle)
 	{
 		// re-orient the rectangle so TL is smaller than BR, otherwise we'll get a negative width/height which confuses things
-		const int x1 = mouse_drag_rectangle.getTopLeft().x;
-		const int y1 = mouse_drag_rectangle.getTopLeft().y;
+		const int x1 = mouse_drag_rectangle.getX();
+		const int y1 = mouse_drag_rectangle.getY();
 		const int x2 = mouse_current_loc.x;
 		const int y2 = mouse_current_loc.y;
 
@@ -275,14 +275,13 @@ void dm::CrosshairComponent::mouseUp(const MouseEvent & event)
 
 	repaint();
 
-	return;
 }
 
 
 void dm::CrosshairComponent::mouseDrag(const MouseEvent & event)
 {
-	mouse_previous_loc	= mouse_current_loc;
-	mouse_current_loc	= event.getPosition() + juce::Point<int>(mouse_drag_offset.x, mouse_drag_offset.y);
+	mouse_previous_loc = mouse_current_loc;
+	mouse_current_loc = event.getPosition() + juce::Point<int>(mouse_drag_offset.x, mouse_drag_offset.y);
 
 	if (mouse_drag_rectangle == invalid_rectangle or
 		mouse_drag_rectangle.getX() == -1 or

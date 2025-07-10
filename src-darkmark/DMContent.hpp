@@ -299,17 +299,21 @@ namespace dm
 			SId filter_use_this_subset_of_class_ids;
 
 			// merge mode
-			bool merge_mode_active = false;
+			bool merge_mode_active;
 			bool mass_delete_mode_active = false;
-			std::vector<Mark> merge_start_marks; // Holds marks from the first key frame.
-			size_t merge_start_index = 0; // Holds the index of the first key frame.
+			std::vector<Mark> merge_start_marks; ///< Holds marks from the first key frame.
+			size_t merge_start_index; ///< Holds the index of the first key frame.
+
 			void startMergeMode();
-			void selectMergeKeyFrame(); // Called on mouse click in merge mode.
-			void interpolateMarks(const std::vector<Mark> &startMarks,
+			void selectMergeKeyFrame(); ///< Called on mouse click in merge mode.
+			void interpolateMarks(const std::vector<Mark> & startMarks, const std::vector<Mark> & endMarks, int numIntermediateFrames);
+			cv::Rect2d convertToNormalized(const cv::Rect & areaInScreenCoords);
 
-								  const std::vector<Mark> &endMarks,
+			int showClassSelectionMenu();
+			size_t massDeleteMarksForward(const cv::Rect2d &selectionArea, int classIdx, int framesAhead);
 
-								  int numIntermediateFrames);
-			cv::Rect2d convertToNormalized(const cv::Rect &areaInScreenCoords);
+			int askUserForNumberOfFrames();
+			void handleMassDeleteArea(const cv::Rect &areaInScreenCoords);
+			size_t massDeleteMarks(const cv::Rect2d &selectionArea, int classIdx);
 	};
 }

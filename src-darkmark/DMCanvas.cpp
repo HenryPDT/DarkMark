@@ -601,6 +601,14 @@ void dm::DMCanvas::mouseDragFinished(juce::Rectangle<int> drag_rect, const Mouse
 		return;
 	}
 
+	if (content.mass_delete_mode_active)
+	{
+		cv::Rect r(drag_rect.getX(), drag_rect.getY(), drag_rect.getWidth(), drag_rect.getHeight());
+		content.handleMassDeleteArea(r);
+
+		return; // skip the normal single-mark bounding-box code
+	}
+
 	double midx			= drag_rect.getCentreX() + zoom_image_offset.x;
 	double midy			= drag_rect.getCentreY() + zoom_image_offset.y;
 	double width		= drag_rect.getWidth();

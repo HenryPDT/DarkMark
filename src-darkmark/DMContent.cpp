@@ -61,7 +61,9 @@ dm::DMContent::DMContent(const std::string & prefix) :
 	project_info(cfg_prefix),
 	user_specified_zoom_factor(-1.0),
 	previous_zoom_factor(5.0),
-	current_zoom_factor(1.0)
+	current_zoom_factor(1.0),
+	merge_mode_active(false),
+	merge_start_index(0)
 {
 	addAndMakeVisible(canvas);
 	addAndMakeVisible(scrollfield);
@@ -635,6 +637,19 @@ bool dm::DMContent::keyPressed(const KeyPress & key)
 			// get out of zoom mode instead of quitting from the application
 			return keyPressed(KeyPress::createFromDescription("spacebar"));
 		}
+		else if (merge_mode_active)
+		{
+			show_message("Merge mode cancelled.");
+			merge_mode_active = false;
+			merge_start_marks.clear();
+			return true;
+		}
+		else if (mass_delete_mode_active)
+		{
+			show_message("Mass-delete mode cancelled.");
+			mass_delete_mode_active = false;
+			return true;
+		}
 
 		dmapp().wnd->closeButtonPressed();
 		return true;
@@ -780,9 +795,23 @@ bool dm::DMContent::keyPressed(const KeyPress & key)
 		show_message("user marks: " + std::string(show_marks ? "visible" : "hidden"));
 		return true;
 	}
+	else if (keychar == 'o')
+	{
+		// If mass-delete mode is off, turn it on. Otherwise, turn it off.
+		if (not mass_delete_mode_active)
+		{
+			mass_delete_mode_active = true;
+			show_message("Mass-delete mode activated. Click and drag to select an area.");
+		}
+		else
+		{
+			mass_delete_mode_active = false;
+			show_message("Mass-delete mode deactivated.");
+		}
+	}
 	else if (key.getTextCharacter() == '`')
 	{
-		if (!merge_mode_active)
+		if (not merge_mode_active)
 		{
 			startMergeMode();
 		}
@@ -790,7 +819,7 @@ bool dm::DMContent::keyPressed(const KeyPress & key)
 		{
 			merge_mode_active = false;
 			merge_start_marks.clear();
-			show_message("Merge mode canceled.");
+			show_message("Merge mode cancelled.");
 		}
 		return true;
 	}
@@ -2067,11 +2096,15 @@ dm::DMContent & dm::DMContent::erase_all_marks()
 
 PopupMenu dm::DMContent::create_class_menu()
 {
-	const bool is_enabled = (selected_mark >= 0 and (size_t)selected_mark < marks.size() ? true : false);
+	// const bool is_enabled = (selected_mark >= 0 and (size_t)selected_mark < marks.size() ? true : false);
 
+	bool always_enable = (mass_delete_mode_active == true);
+	bool is_enabled_when_selected = (selected_mark >= 0 and (size_t)selected_mark < marks.size());
+	bool is_enabled = always_enable or is_enabled_when_selected;
 	int selected_class_idx = -1;
-	if (is_enabled)
+	if (is_enabled_when_selected)
 	{
+		// Only access marks if we have a valid selection
 		const Mark & m = marks.at(selected_mark);
 		selected_class_idx = (int)m.class_idx;
 	}
@@ -2103,7 +2136,20 @@ PopupMenu dm::DMContent::create_class_menu()
 			m.addSectionHeader(ss.str());
 		}
 
-		m.addItem(name, (is_enabled and not is_ticked), is_ticked, std::function<void()>( [&, idx]{ this->set_class(idx); } ));
+		// For mass delete mode, we use the menu ID to return the class index
+		// We add 1 to idx because 0 is reserved for "cancelled"
+		if (mass_delete_mode_active)
+		{
+			m.addItem(idx + 1, name, is_enabled, is_ticked);
+		}
+		else
+		{
+			// Normal mode, use the lambda callback
+			m.addItem(name, is_enabled, is_ticked, [&, idx]
+			{
+				this->set_class(idx);
+			} );
+		}
 	}
 
 	bool image_already_marked = false;
@@ -2838,28 +2884,30 @@ bool dm::DMContent::snap_annotation(int idx)
 	return adjusted;
 }
 
-// ---------------------------------------------------------------------------
-// Merge mode methods for DMContent
-// ---------------------------------------------------------------------------
+
 void dm::DMContent::startMergeMode()
 {
 	// Turn on the merge mode and clear any leftover data.
 	merge_mode_active = true;
 	merge_start_marks.clear();
-
 	show_message("Merge mode activated. Double-click to select the FIRST key frame.");
+
+	return;
 }
+
 
 void dm::DMContent::selectMergeKeyFrame()
 {
-	if (!merge_mode_active)
+	if (not merge_mode_active)
+	{
 		return; // Do nothing if we're not in merge mode.
+	}
 
 	// Are we picking the FIRST key frame?
 	if (merge_start_marks.empty())
 	{
 		// Make sure the user has actually clicked a valid bounding box:
-		if (selected_mark < 0 || selected_mark >= static_cast<int>(marks.size()))
+		if (selected_mark < 0 or selected_mark >= static_cast<int>(marks.size()))
 		{
 			show_message("No mark selected. Double-click on a bounding box first.");
 			return;
@@ -2871,14 +2919,16 @@ void dm::DMContent::selectMergeKeyFrame()
 
 		merge_start_index = image_filename_index;
 
-		show_message("First key frame selected. Now navigate to the SECOND key frame and double-click to merge.");
+		show_message("First key frame selected. Navigate to the SECOND key frame and double-click to merge.");
 	}
 	else
 	{
 		// This is the SECOND key frame.
-		if (selected_mark < 0 || selected_mark >= static_cast<int>(marks.size()))
+		if (selected_mark < 0 or selected_mark >= static_cast<int>(marks.size()))
 		{
 			show_message("No mark selected in second key frame. Merge cancelled.");
+			merge_mode_active = false;
+			merge_start_marks.clear();
 			return;
 		}
 
@@ -2887,9 +2937,13 @@ void dm::DMContent::selectMergeKeyFrame()
 		// Calculate how many frames are in between.
 		int numIntermediate = 0;
 		if (merge_end_index > merge_start_index)
+		{
 			numIntermediate = static_cast<int>(merge_end_index - merge_start_index - 1);
+		}
 		else if (merge_start_index > merge_end_index)
+		{
 			numIntermediate = static_cast<int>(merge_start_index - merge_end_index - 1);
+		}
 
 		if (numIntermediate < 1)
 		{
@@ -2903,7 +2957,6 @@ void dm::DMContent::selectMergeKeyFrame()
 
 			// Now interpolate from merge_start_marks[0] to endMarkVec[0].
 			interpolateMarks(merge_start_marks, endMarkVec, numIntermediate);
-			show_message("Merge complete—intermediate annotations interpolated.");
 		}
 
 		// Reset merge mode so we don't accidentally keep merging.
@@ -2912,25 +2965,29 @@ void dm::DMContent::selectMergeKeyFrame()
 	}
 }
 
-void dm::DMContent::interpolateMarks(
-	const std::vector<Mark> &startMarks,
-	const std::vector<Mark> &endMarks,
-	int /*numIntermediateFrames*/)
+
+void dm::DMContent::interpolateMarks(const std::vector<Mark> & startMarks, const std::vector<Mark> & endMarks, int /*numIntermediateFrames*/)
 {
 	// Basic sanity checks.
-	if (startMarks.empty() || endMarks.empty())
+	if (startMarks.empty() or endMarks.empty())
 	{
-		Log("Interpolation error: one of the key frames has no mark.");
+		Log("Interpolation error: one of the key frames has no marks.");
 		return;
 	}
 
 	// Because we pushed_back only one Mark in each vector:
-	const Mark &startMark = startMarks.front();
-	const Mark &endMark = endMarks.front();
+	const Mark & startMark	= startMarks.front();
+	const Mark & endMark	= endMarks	.front();
+
+	if (startMark.class_idx != endMark.class_idx)
+	{
+		show_message("Cannot merge objects with different classes.");
+		return;
+	}
 
 	// Retrieve the normalized bounding rects from the key frames.
-	cv::Rect2d r1 = startMark.get_normalized_bounding_rect();
-	cv::Rect2d r2 = endMark.get_normalized_bounding_rect();
+	cv::Rect2d r1 = startMark	.get_normalized_bounding_rect();
+	cv::Rect2d r2 = endMark		.get_normalized_bounding_rect();
 
 	// Save the class info from the start mark (or whichever you prefer).
 	size_t retained_class = startMark.class_idx;
@@ -2938,11 +2995,11 @@ void dm::DMContent::interpolateMarks(
 	std::string retained_desc = startMark.description;
 
 	// Determine which way we’re interpolating (startIdx < endIdx or vice versa).
-	size_t startIdx = merge_start_index;
-	size_t endIdx = image_filename_index;
+	const size_t startIdx	= merge_start_index;
+	const size_t endIdx		= image_filename_index;
 
-	if (startIdx == endIdx ||
-		(startIdx + 1 >= endIdx && endIdx >= startIdx) ||
+	if (startIdx == endIdx or
+		(startIdx + 1 >= endIdx && endIdx >= startIdx) or
 		(endIdx + 1 >= startIdx && startIdx >= endIdx))
 	{
 		Log("No intermediate frames available.");
@@ -2967,8 +3024,8 @@ void dm::DMContent::interpolateMarks(
 		cInterp.y = c1.y + t * (c2.y - c1.y);
 
 		// Linear interpolation for width & height:
-		double wInterp = r1.width + t * (r2.width - r1.width);
-		double hInterp = r1.height + t * (r2.height - r1.height);
+		double wInterp = r1.width	+ t * (r2.width		- r1.width	);
+		double hInterp = r1.height	+ t * (r2.height	- r1.height	);
 
 		// Build the new normalized rect from center & size.
 		cv::Rect2d rInterpNorm;
@@ -2977,7 +3034,7 @@ void dm::DMContent::interpolateMarks(
 		rInterpNorm.width = wInterp;
 		rInterpNorm.height = hInterp;
 
-		// Convert normalized → absolute pixel coords:
+		// Convert normalized -> absolute pixel coords:
 		cv::Rect absRect(
 			static_cast<int>(rInterpNorm.x * curSize.width),
 			static_cast<int>(rInterpNorm.y * curSize.height),
@@ -2997,8 +3054,6 @@ void dm::DMContent::interpolateMarks(
 		// Insert the new annotation. We do *not* erase other marks in that frame.
 		marks.push_back(interp);
 		need_to_save = true;
-		save_json();
-		save_text();
 
 		Log("Frame " + std::to_string(frameIdx) + ": Interpolated annotation created.");
 	};
@@ -3022,11 +3077,16 @@ void dm::DMContent::interpolateMarks(
 		}
 	}
 
-	// Finally, rebuild the display for the current frame.
-	rebuild_image_and_repaint();
+	show_message("Merge complete. Intermediate annotations interpolated.");
+
+	// position us back where we started the merge
+	load_image(startIdx, true, true);
+
+	return;
 }
 
-cv::Rect2d dm::DMContent::convertToNormalized(const cv::Rect &areaInScreenCoords)
+
+cv::Rect2d dm::DMContent::convertToNormalized(const cv::Rect & areaInScreenCoords)
 {
 	double imgW = scaled_image_size.width;
 	double imgH = scaled_image_size.height;
@@ -3038,4 +3098,139 @@ cv::Rect2d dm::DMContent::convertToNormalized(const cv::Rect &areaInScreenCoords
 	double h = areaInScreenCoords.height / imgH;
 
 	return cv::Rect2d(x, y, w, h);
+}
+
+
+int dm::DMContent::showClassSelectionMenu()
+{
+	PopupMenu menu = create_class_menu();
+
+	// .show() returns an integer ID. 0 means the user hit ESC or cancelled.
+	int result = menu.show();
+	if (result == 0)
+	{
+		// user cancelled
+		return -1;
+	}
+
+	// We added 1 to the class index when creating the menu,
+	// so subtract 1 here to get the actual class index
+	return result - 1;
+}
+
+
+size_t dm::DMContent::massDeleteMarksForward(const cv::Rect2d &selectionArea, int classIdx, int framesAhead)
+{
+	// current index is the frame we’re on
+	size_t startIndex = image_filename_index;
+	size_t counter = 0;
+
+	for (size_t i = 0; i <= (size_t)framesAhead; ++i)
+	{
+		size_t newIndex = startIndex + i;
+		if (newIndex >= image_filenames.size())
+		{
+			show_message("Reached the end of the image list. Stopping mass-delete.");
+			break;
+		}
+
+		// 1. Load next frame in full mode
+		load_image(newIndex, /* full_load= */ true, /* display_immediately= */ true);
+
+		// 2. massDeleteMarks() using the same area/class
+		counter += massDeleteMarks(selectionArea, classIdx);
+	}
+
+	// Finally, reload the original frame so user sees where they started
+	load_image(startIndex, /* full_load= */ true, /* display_immediately= */ true);
+
+	return counter;
+}
+
+
+int dm::DMContent::askUserForNumberOfFrames()
+{
+	AlertWindow w("Mass Delete", "In addition to the current frame, this mass deletion should apply to how many more frames?", AlertWindow::QuestionIcon);
+	w.addTextEditor("num_frames", "0"); // default 0 means only this frame
+	w.addButton("OK", 1);
+	w.addButton("Cancel", 0);
+
+	if (w.runModalLoop() == 1)
+	{
+		String text = w.getTextEditor("num_frames")->getText();
+		int n = text.getIntValue();
+		if (n < 0)
+		{
+			n = 0; // clamp negative to 0
+		}
+		return n;
+	}
+	return -1; // user canceled
+}
+
+
+size_t dm::DMContent::massDeleteMarks(const cv::Rect2d &selectionArea, int classIdx)
+{
+	size_t count_deleted = 0;
+
+	for (auto it = marks.begin(); it != marks.end();)
+	{
+		if (static_cast<int>(it->class_idx) == classIdx)
+		{
+			cv::Rect2d markRect = it->get_normalized_bounding_rect();
+
+			const bool fully_inside =
+				(markRect.x >= selectionArea.x) and
+				(markRect.y >= selectionArea.y) and
+				(markRect.x + markRect.width	<= selectionArea.x + selectionArea.width) and
+				(markRect.y + markRect.height	<= selectionArea.y + selectionArea.height);
+
+			if (fully_inside)
+			{
+				it = marks.erase(it);
+				count_deleted ++;
+				need_to_save = true;
+				continue;
+			}
+		}
+		++it;
+	}
+
+	return count_deleted;
+}
+
+
+void dm::DMContent::handleMassDeleteArea(const cv::Rect &areaInScreenCoords)
+{
+	// Convert to normalized coords
+	auto normalizedArea = convertToNormalized(areaInScreenCoords);
+
+	// Let user pick a class
+	int massDeleteClassIdx = showClassSelectionMenu();
+
+	if (massDeleteClassIdx < 0)
+	{
+		show_message("Mass-delete cancelled.");
+		return;
+	}
+
+	// Ask user for how many future frames to delete from
+	int framesAhead = askUserForNumberOfFrames();
+
+	if (framesAhead < 0)
+	{
+		show_message("Mass-delete cancelled.");
+		return;
+	}
+
+	const auto saved_show_predictions = show_predictions;
+	toggle_show_predictions(EToggle::kOff);
+
+	const auto counter = massDeleteMarksForward(normalizedArea, massDeleteClassIdx, framesAhead);
+	mass_delete_mode_active = false;
+	toggle_show_predictions(saved_show_predictions);
+
+	show_message("Number of marks of type \"" + names[massDeleteClassIdx] + "\" deleted: " + std::to_string(counter) + ".");
+
+	return;
 }
