@@ -6,18 +6,29 @@
 #include <random>
 
 
-dm::SplitDialog::SplitDialog() :
-	DocumentWindow("DarkMark - Split Dataset", Colours::darkgrey, TitleBarButtons::closeButton),
-	header_message("", "Select the percentage split for training vs validation data:"),
-	txt_train_percentage("", "Training %:"),
+dm::ExportDialog::ExportDialog() :
+	DocumentWindow("DarkMark - Export Dataset", Colours::darkgrey, TitleBarButtons::closeButton),
+	header_message("", "Configure export settings:"),
+	lbl_image_selection("", "Images to export:"),
+	btn_all_images("All Images"),
+	btn_annotated_only("Annotated Only"),
+	lbl_format_selection("", "Export format:"),
+	btn_darknet_yolo("Darknet/YOLOv4"),
+	btn_yolov5("YOLOv5"),
+	btn_coco("COCO"),
+	cb_enable_split("Enable train/validation split"),
+	lbl_train_percentage("", "Training %:"),
 	sl_train_percentage(Slider::SliderStyle::LinearHorizontal, Slider::TextEntryBoxPosition::TextBoxRight),
-	txt_val_percentage("", "Validation %: 20.0"),
+	lbl_val_percentage("", "Validation %: 20.0"),
 	lbl_seed("", "Seed (optional):"),
 	txt_seed(),
 	help_seed("", "Leave empty for random split, or enter a number for reproducible split"),
-	ok_button("OK"),
+	ok_button("Export"),
 	cancel_button("Cancel"),
-	ok_pressed(false)
+	ok_pressed(false),
+	export_all_images(false),
+	export_yolov5_format(false),
+	export_coco_format(false)
 {
 	setContentNonOwned(&canvas, true);
 	setUsingNativeTitleBar(true);
@@ -25,16 +36,38 @@ dm::SplitDialog::SplitDialog() :
 	setDropShadowEnabled(true);
 
 	canvas.addAndMakeVisible(header_message);
-	canvas.addAndMakeVisible(txt_train_percentage);
+	canvas.addAndMakeVisible(lbl_image_selection);
+	canvas.addAndMakeVisible(btn_all_images);
+	canvas.addAndMakeVisible(btn_annotated_only);
+	canvas.addAndMakeVisible(lbl_format_selection);
+	canvas.addAndMakeVisible(btn_darknet_yolo);
+	canvas.addAndMakeVisible(btn_yolov5);
+	canvas.addAndMakeVisible(btn_coco);
+	canvas.addAndMakeVisible(cb_enable_split);
+	canvas.addAndMakeVisible(lbl_train_percentage);
 	canvas.addAndMakeVisible(sl_train_percentage);
-	canvas.addAndMakeVisible(txt_val_percentage);
+	canvas.addAndMakeVisible(lbl_val_percentage);
 	canvas.addAndMakeVisible(lbl_seed);
 	canvas.addAndMakeVisible(txt_seed);
 	canvas.addAndMakeVisible(help_seed);
 	canvas.addAndMakeVisible(ok_button);
 	canvas.addAndMakeVisible(cancel_button);
 
-	// Set up the slider like in VideoImportWindow
+	// Set up image selection buttons (exclusive)
+	btn_annotated_only.setToggleState(true, NotificationType::dontSendNotification);
+	btn_annotated_only.setColour(TextButton::buttonOnColourId, Colours::lightblue);
+	btn_all_images.setColour(TextButton::buttonOnColourId, Colours::lightblue);
+
+	// Set up format selection buttons (exclusive)
+	btn_darknet_yolo.setToggleState(true, NotificationType::dontSendNotification); // Default to Darknet/YOLOv4
+	export_yolov5_format = false;
+	export_coco_format = false;
+	btn_darknet_yolo.setColour(TextButton::buttonOnColourId, Colours::lightgreen);
+	btn_yolov5.setColour(TextButton::buttonOnColourId, Colours::lightgreen);
+	btn_coco.setColour(TextButton::buttonOnColourId, Colours::lightgreen);
+
+	// Set up split controls
+	cb_enable_split.setToggleState(false, NotificationType::dontSendNotification); // Default disabled
 	sl_train_percentage.setRange(50.0, 95.0, 1.0);
 	sl_train_percentage.setNumDecimalPlacesToDisplay(0);
 	sl_train_percentage.setValue(80.0); // Default 80% training, 20% validation
@@ -43,7 +76,7 @@ dm::SplitDialog::SplitDialog() :
 	sl_train_percentage.onValueChange = [this]() {
 		double train_pct = sl_train_percentage.getValue();
 		double val_pct = 100.0 - train_pct;
-		txt_val_percentage.setText("Validation %: " + String(val_pct, 1), NotificationType::dontSendNotification);
+		lbl_val_percentage.setText("Validation %: " + String(val_pct, 1), NotificationType::dontSendNotification);
 	};
 
 	// Configure seed input
@@ -56,8 +89,19 @@ dm::SplitDialog::SplitDialog() :
 	help_seed.setFont(Font(12.0f, Font::italic));
 	help_seed.setColour(Label::textColourId, Colours::lightgrey);
 
+	// Add toggle listener to enable/disable split controls
+	cb_enable_split.onStateChange = [this]() { updateSplitControls(); };
+
+	// Add listeners
+	btn_all_images.addListener(this);
+	btn_annotated_only.addListener(this);
+	btn_darknet_yolo.addListener(this);
+	btn_yolov5.addListener(this);
+	btn_coco.addListener(this);
 	ok_button.addListener(this);
 	cancel_button.addListener(this);
+
+	updateSplitControls(); // Initialize split control states
 
 	setIcon(DarkMarkLogo());
 	ComponentPeer *peer = getPeer();
@@ -66,26 +110,37 @@ dm::SplitDialog::SplitDialog() :
 		peer->setIcon(DarkMarkLogo());
 	}
 
-	centreWithSize(450, 280);
+	centreWithSize(500, 450);
 	setVisible(true);
 }
 
-dm::SplitDialog::~SplitDialog()
+dm::ExportDialog::~ExportDialog()
 {
 }
 
-void dm::SplitDialog::closeButtonPressed()
+void dm::ExportDialog::closeButtonPressed()
 {
 	setVisible(false);
 	exitModalState(0);
 }
 
-void dm::SplitDialog::userTriedToCloseWindow()
+void dm::ExportDialog::userTriedToCloseWindow()
 {
 	closeButtonPressed();
 }
 
-void dm::SplitDialog::resized()
+void dm::ExportDialog::updateSplitControls()
+{
+	bool enabled = cb_enable_split.getToggleState();
+	lbl_train_percentage.setEnabled(enabled);
+	sl_train_percentage.setEnabled(enabled);
+	lbl_val_percentage.setEnabled(enabled);
+	lbl_seed.setEnabled(enabled);
+	txt_seed.setEnabled(enabled);
+	help_seed.setEnabled(enabled);
+}
+
+void dm::ExportDialog::resized()
 {
 	DocumentWindow::resized();
 
@@ -97,28 +152,55 @@ void dm::SplitDialog::resized()
 	fb_rows.alignItems = FlexBox::AlignItems::stretch;
 	fb_rows.justifyContent = FlexBox::JustifyContent::flexStart;
 
-	fb_rows.items.add(FlexItem(header_message).withHeight(height * 2).withMargin(FlexItem::Margin(margin_size, 0, margin_size, 0)));
+	// Header
+	fb_rows.items.add(FlexItem(header_message).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, margin_size, 0)));
+	
+	// Image selection
+	fb_rows.items.add(FlexItem(lbl_image_selection).withHeight(height).withMargin(FlexItem::Margin(0, 0, 5, 0)));
+	FlexBox fb_images;
+	fb_images.flexDirection = FlexBox::Direction::row;
+	fb_images.justifyContent = FlexBox::JustifyContent::flexStart;
+	fb_images.items.add(FlexItem(btn_annotated_only).withWidth(150.0f).withHeight(height));
+	fb_images.items.add(FlexItem().withWidth(margin_size));
+	fb_images.items.add(FlexItem(btn_all_images).withWidth(150.0f).withHeight(height));
+	fb_rows.items.add(FlexItem(fb_images).withHeight(height).withMargin(FlexItem::Margin(0, 0, margin_size, 0)));
+
+	// Format selection
+	fb_rows.items.add(FlexItem(lbl_format_selection).withHeight(height).withMargin(FlexItem::Margin(0, 0, 5, 0)));
+	FlexBox fb_formats;
+	fb_formats.flexDirection = FlexBox::Direction::row;
+	fb_formats.justifyContent = FlexBox::JustifyContent::flexStart;
+	fb_formats.items.add(FlexItem(btn_darknet_yolo).withWidth(120.0f).withHeight(height));
+	fb_formats.items.add(FlexItem().withWidth(margin_size));
+	fb_formats.items.add(FlexItem(btn_yolov5).withWidth(100.0f).withHeight(height));
+	fb_formats.items.add(FlexItem().withWidth(margin_size));
+	fb_formats.items.add(FlexItem(btn_coco).withWidth(100.0f).withHeight(height));
+	fb_rows.items.add(FlexItem(fb_formats).withHeight(height).withMargin(FlexItem::Margin(0, 0, margin_size, 0)));
+
+	// Split options
+	fb_rows.items.add(FlexItem(cb_enable_split).withHeight(height).withMargin(FlexItem::Margin(0, 0, 5, 0)));
 	
 	FlexBox fb_train;
 	fb_train.flexDirection = FlexBox::Direction::row;
 	fb_train.justifyContent = FlexBox::JustifyContent::flexStart;
-	fb_train.items.add(FlexItem(txt_train_percentage).withWidth(100.0f).withHeight(height));
+	fb_train.items.add(FlexItem(lbl_train_percentage).withWidth(100.0f).withHeight(height));
 	fb_train.items.add(FlexItem(sl_train_percentage).withWidth(200.0f).withHeight(height));
-	fb_rows.items.add(FlexItem(fb_train).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, 0, 0)));
+	fb_rows.items.add(FlexItem(fb_train).withHeight(height).withMargin(FlexItem::Margin(0, 0, 0, 0)));
 
-	fb_rows.items.add(FlexItem(txt_val_percentage).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, margin_size, 0)));
+	fb_rows.items.add(FlexItem(lbl_val_percentage).withHeight(height).withMargin(FlexItem::Margin(5, 0, 5, 0)));
 
-	// Add seed input row
+	// Seed input row
 	FlexBox fb_seed;
 	fb_seed.flexDirection = FlexBox::Direction::row;
 	fb_seed.justifyContent = FlexBox::JustifyContent::flexStart;
 	fb_seed.items.add(FlexItem(lbl_seed).withWidth(100.0f).withHeight(height));
 	fb_seed.items.add(FlexItem(txt_seed).withWidth(200.0f).withHeight(height));
-	fb_rows.items.add(FlexItem(fb_seed).withHeight(height).withMargin(FlexItem::Margin(margin_size, 0, 0, 0)));
+	fb_rows.items.add(FlexItem(fb_seed).withHeight(height).withMargin(FlexItem::Margin(0, 0, 0, 0)));
 
-	// Add help text
+	// Help text
 	fb_rows.items.add(FlexItem(help_seed).withHeight(height).withMargin(FlexItem::Margin(5, 0, margin_size, 0)));
 
+	// Buttons
 	FlexBox button_row;
 	button_row.flexDirection = FlexBox::Direction::row;
 	button_row.justifyContent = FlexBox::JustifyContent::flexEnd;
@@ -134,9 +216,45 @@ void dm::SplitDialog::resized()
 	fb_rows.performLayout(r);
 }
 
-void dm::SplitDialog::buttonClicked(Button * button)
+void dm::ExportDialog::buttonClicked(Button * button)
 {
-	if (button == &ok_button)
+	if (button == &btn_all_images)
+	{
+		export_all_images = true;
+		btn_all_images.setToggleState(true, NotificationType::dontSendNotification);
+		btn_annotated_only.setToggleState(false, NotificationType::dontSendNotification);
+	}
+	else if (button == &btn_annotated_only)
+	{
+		export_all_images = false;
+		btn_annotated_only.setToggleState(true, NotificationType::dontSendNotification);
+		btn_all_images.setToggleState(false, NotificationType::dontSendNotification);
+	}
+	else if (button == &btn_darknet_yolo)
+	{
+		export_yolov5_format = false;
+		export_coco_format = false;
+		btn_darknet_yolo.setToggleState(true, NotificationType::dontSendNotification);
+		btn_yolov5.setToggleState(false, NotificationType::dontSendNotification);
+		btn_coco.setToggleState(false, NotificationType::dontSendNotification);
+	}
+	else if (button == &btn_yolov5)
+	{
+		export_yolov5_format = true;
+		export_coco_format = false;
+		btn_yolov5.setToggleState(true, NotificationType::dontSendNotification);
+		btn_darknet_yolo.setToggleState(false, NotificationType::dontSendNotification);
+		btn_coco.setToggleState(false, NotificationType::dontSendNotification);
+	}
+	else if (button == &btn_coco)
+	{
+		export_yolov5_format = false;
+		export_coco_format = true;
+		btn_coco.setToggleState(true, NotificationType::dontSendNotification);
+		btn_darknet_yolo.setToggleState(false, NotificationType::dontSendNotification);
+		btn_yolov5.setToggleState(false, NotificationType::dontSendNotification);
+	}
+	else if (button == &ok_button)
 	{
 		ok_pressed = true;
 		closeButtonPressed();
@@ -159,7 +277,6 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	up_button				("up"	, 0.75f, Colours::lightblue),
 	down_button				("down"	, 0.25f, Colours::lightblue),
 	export_button			("Export..."),
-	split_button			("Split..."),
 	apply_button			("Apply..."),
 	cancel_button			("Cancel"),
 	done_looking_for_images	(false),
@@ -172,7 +289,7 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	number_of_annotations_remapped(0),
 	number_of_txt_files_rewritten(0),
 	number_of_files_copied	(0),
-	is_splitting			(false),
+	export_with_split		(false),
 	train_percentage		(80.0)
 {
 	setContentNonOwned		(&canvas, true	);
@@ -185,7 +302,6 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	canvas.addAndMakeVisible(up_button);
 	canvas.addAndMakeVisible(down_button);
 	canvas.addAndMakeVisible(export_button);
-	canvas.addAndMakeVisible(split_button);
 	canvas.addAndMakeVisible(apply_button);
 	canvas.addAndMakeVisible(cancel_button);
 
@@ -205,7 +321,6 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	up_button		.setTooltip("Move the selected class up.");
 	down_button		.setTooltip("Move the selected class down.");
 	export_button	.setTooltip("Export the entire dataset -- including the images -- with the changes shown above to a brand new project.  The current dataset will remain unchanged.");
-	split_button	.setTooltip("Split the dataset into train and validation sets by folder with configurable percentage split.");
 	apply_button	.setTooltip("Apply the changes shown above to the current dataset.");
 
 	up_button		.setVisible(false);
@@ -215,7 +330,6 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	up_button		.addListener(this);
 	down_button		.addListener(this);
 	export_button	.addListener(this);
-	split_button	.addListener(this);
 	apply_button	.addListener(this);
 	cancel_button	.addListener(this);
 
@@ -313,29 +427,34 @@ void dm::ClassIdWnd::closeButtonPressed()
 
 		if (is_exporting)
 		{
-			AlertWindow::showMessageBoxAsync(MessageBoxIconType::InfoIcon,
-					getTitle(),
-					"The dataset has been exported to:\n"
+			String message = "The dataset has been exported to:\n"
 					"\n" +
 					String(export_directory.c_str()) + "\n"
-					"\n"
-					"Number of files copied: "			+ String(number_of_files_copied			) + "\n"
-					"Number of annotations deleted: "	+ String(number_of_annotations_deleted	) + "\n"
-					"Number of annotations remapped: "	+ String(number_of_annotations_remapped	) + "\n"
-					"Number of .txt files modified: "	+ String(number_of_txt_files_rewritten	) + "\n");
+					"\n";
+			
+			if (export_with_split)
+			{
+				message += "Train percentage: "				+ String(train_percentage, 1) + "%\n";
+				message += "Validation percentage: "		+ String(100.0 - train_percentage, 1) + "%\n";
+				if (export_seed.has_value())
+				{
+					message += "Seed used: "				+ String(*export_seed) + "\n";
+				}
+				else
+				{
+					message += "Random seed used\n";
+				}
+				message += "\n";
+			}
+			
+			message += "Number of files copied: "			+ String(number_of_files_copied			) + "\n";
+			message += "Number of annotations deleted: "	+ String(number_of_annotations_deleted	) + "\n";
+			message += "Number of annotations remapped: "	+ String(number_of_annotations_remapped	) + "\n";
+			message += "Number of .txt files modified: "	+ String(number_of_txt_files_rewritten	) + "\n";
+			
+			AlertWindow::showMessageBoxAsync(MessageBoxIconType::InfoIcon, getTitle(), message);
 		}
-		else if (is_splitting)
-		{
-			AlertWindow::showMessageBoxAsync(MessageBoxIconType::InfoIcon,
-					getTitle(),
-					"The dataset has been split to:\n"
-					"\n" +
-					String(split_directory.c_str()) + "\n"
-					"\n"
-					"Train percentage: "				+ String(train_percentage, 1) + "%\n"
-					"Validation percentage: "			+ String(100.0 - train_percentage, 1) + "%\n"
-					"Number of files copied: "			+ String(number_of_files_copied) + "\n");
-		}
+
 		else  if (names_file_rewritten)
 		{
 			dmapp().startup_wnd->refresh_button.triggerClick();
@@ -387,8 +506,6 @@ void dm::ClassIdWnd::resized()
 	button_row.items.add(FlexItem()					.withFlex(1.0));
 	button_row.items.add(FlexItem(export_button)	.withWidth(100.0));
 	button_row.items.add(FlexItem()					.withWidth(margin_size));
-	button_row.items.add(FlexItem(split_button)		.withWidth(100.0));
-	button_row.items.add(FlexItem()					.withWidth(margin_size));
 	button_row.items.add(FlexItem(apply_button)		.withWidth(100.0));
 	button_row.items.add(FlexItem()					.withWidth(margin_size));
 	button_row.items.add(FlexItem(cancel_button)	.withWidth(100.0));
@@ -418,104 +535,37 @@ void dm::ClassIdWnd::buttonClicked(Button * button)
 		dm::Log("export button has been pressed!");
 		setEnabled(false);
 
-		const auto name = std::filesystem::path(names_fn).stem().string();
-
-		const int result = NativeMessageBox::show(
-			MessageBoxOptions().
-				withAssociatedComponent(this).
-				withIconType(MessageBoxIconType::QuestionIcon).
-				withMessage("This will export both images and annotations to create a brand new dataset.\n\nWhich images from the \"" + name + "\" dataset should be exported to the new dataset?").
-				withTitle("DarkMark Export New Dataset").
-				withButton("All Images"				).
-				withButton("Only Annotated Images"	).
-				withButton("Cancel"					));
-
-		// cancel button seems to always be "0" even when specified last, other buttons are "1" and "2"
-		if (result > 0)
-		{
-			export_all_images = (result == 1);
-			
-			// Now ask for the export format type
-			const int format_type_result = NativeMessageBox::show(
-				MessageBoxOptions().
-					withAssociatedComponent(this).
-					withIconType(MessageBoxIconType::QuestionIcon).
-					withMessage("Choose the export format type:").
-					withTitle("DarkMark Export Format").
-					withButton("YOLO Formats").
-					withButton("COCO Format").
-					withButton("Cancel"));
-			
-			int format_result = 0;
-			
-			if (format_type_result == 1)
-			{
-				// User chose YOLO formats, now ask which YOLO version
-				const int yolo_version_result = NativeMessageBox::show(
-					MessageBoxOptions().
-						withAssociatedComponent(this).
-						withIconType(MessageBoxIconType::QuestionIcon).
-						withMessage("Choose the YOLO format version:").
-						withTitle("DarkMark YOLO Format").
-						withButton("Darknet/YOLOv4").
-						withButton("YOLOv5").
-						withButton("Cancel"));
-				
-				if (yolo_version_result > 0)
-				{
-					format_result = yolo_version_result; // 1 for Darknet/YOLOv4, 2 for YOLOv5
-				}
-			}
-			else if (format_type_result == 2)
-			{
-				// User chose COCO format
-				format_result = 3; // Map to COCO format
-			}
-
-			if (format_result > 0 && format_result <= 3)
-			{
-				is_exporting = true;
-				export_yolov5_format = (format_result == 2);
-				export_coco_format = (format_result == 3);
-				runThread(); // calls run() and waits for it to be done
-				dm::Log("forcing the window to close");
-				closeButtonPressed();
-			}
-			else
-			{
-				// cancelled format selection
-				setEnabled(true);
-			}
-		}
-		else
-		{
-			// cancelled action
-			setEnabled(true);
-		}
-	}
-	else if (button == &split_button)
-	{
-		dm::Log("split button has been pressed!");
-		setEnabled(false);
-
-		// Create and show the split dialog with slider
-		SplitDialog dialog;
+		// Create and show the export dialog
+		ExportDialog dialog;
 		dialog.runModalLoop();
 		
 		if (dialog.wasOkPressed())
 		{
-			train_percentage = dialog.getTrainPercentage();
-			if (dialog.hasSeed())
+			export_all_images = dialog.getExportAllImages();
+			export_yolov5_format = dialog.getExportYolov5Format();
+			export_coco_format = dialog.getExportCocoFormat();
+			export_with_split = dialog.getExportWithSplit();
+			
+			if (export_with_split)
 			{
-				split_seed = dialog.getSeed();
-				dm::Log("Selected train percentage: " + std::to_string(train_percentage) + ", seed: " + std::to_string(*split_seed));
+				train_percentage = dialog.getTrainPercentage();
+				if (dialog.hasSeed())
+				{
+					export_seed = dialog.getSeed();
+					dm::Log("Export with split: " + std::to_string(train_percentage) + "% train, seed: " + std::to_string(*export_seed));
+				}
+				else
+				{
+					export_seed = std::nullopt;
+					dm::Log("Export with split: " + std::to_string(train_percentage) + "% train, random seed");
+				}
 			}
 			else
 			{
-				split_seed = std::nullopt;
-				dm::Log("Selected train percentage: " + std::to_string(train_percentage) + ", random seed");
+				dm::Log("Export without split");
 			}
-			is_splitting = true;
+			
+			is_exporting = true;
 			runThread(); // calls run() and waits for it to be done
 			dm::Log("forcing the window to close");
 			closeButtonPressed();
@@ -631,7 +681,12 @@ namespace
 void dm::ClassIdWnd::run_export()
 {
 	const std::filesystem::path source = dir.getFullPathName().toStdString();
-	const std::filesystem::path target = (source.string() + "_export_" + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
+	std::string export_suffix = "_export_";
+	if (export_with_split)
+	{
+		export_suffix = "_export_split_";
+	}
+	const std::filesystem::path target = (source.string() + export_suffix + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
 	export_directory = target;
 
 	Log("export dataset src=" + source.string());
@@ -655,29 +710,154 @@ void dm::ClassIdWnd::run_export()
 	// remember the new .names file so it gets saved in the right location in run()
 	names_fn = (target / std::filesystem::relative(names_fn, source)).string();
 
-	VStr dst_images;
-	dst_images.reserve(all_images.size());
-	double work_completed = 0.0f;
-	const double work_to_be_done = all_images.size();
-
-	for (size_t idx = 0; idx < all_images.size() and not threadShouldExit(); idx ++)
+	if (export_with_split)
 	{
-		setProgress(work_completed / work_to_be_done);
-		work_completed ++;
+		// Use the same key-based approach as YOLOv5/COCO for consistency
+		std::map<std::string, std::filesystem::path> image_map;
+		std::map<std::string, std::filesystem::path> label_map;
 
-		std::filesystem::path src = all_images[idx];
-		std::filesystem::path dst = target / std::filesystem::relative(src, source);
-
-		if (export_all_images or std::filesystem::exists(std::filesystem::path(src).replace_extension(".txt")))
+		// Build maps of normalized keys to full paths (same as YOLOv5/COCO)
+		for (const auto& image_path : all_images)
 		{
-			// this will copy both the image and the .txt annotation file (if it exists)
-			cp_files(src, dst);
-			number_of_files_copied ++;
-			dst_images.push_back(dst.string());
+			std::filesystem::path img_path(image_path);
+			std::filesystem::path rel_path = std::filesystem::relative(img_path, source);
+			
+			// Use relative path without extension as key (same as YOLOv5/COCO)
+			std::string key = rel_path.replace_extension("").string();
+			image_map[key] = img_path;
 		}
-	}
 
-	all_images.swap(dst_images);
+		// Find corresponding label files (same as YOLOv5/COCO)
+		for (const auto& [key, image_path] : image_map)
+		{
+			std::filesystem::path txt_path = std::filesystem::path(image_path).replace_extension(".txt");
+			if (std::filesystem::exists(txt_path))
+			{
+				label_map[key] = txt_path;
+			}
+		}
+
+		// Determine valid keys (same as YOLOv5/COCO)
+		VStr valid_keys;
+		for (const auto& [key, image_path] : image_map)
+		{
+			if (export_all_images || label_map.count(key))
+			{
+				valid_keys.push_back(key);
+			}
+		}
+
+		// Shuffle for split (identical to YOLOv5/COCO logic)
+		std::mt19937 g;
+		if (export_seed.has_value())
+		{
+			g.seed(*export_seed);
+			Log("Using deterministic seed " + std::to_string(*export_seed) + " for Darknet export split");
+		}
+		else
+		{
+			std::random_device rd;
+			g.seed(rd());
+			Log("Using random seed for Darknet export split");
+		}
+		std::shuffle(valid_keys.begin(), valid_keys.end(), g);
+
+		// Group shuffled keys by their parent directory (subdirectory)
+		std::map<std::string, std::vector<std::pair<std::string, bool>>> subdir_assignments;
+		
+		for (size_t idx = 0; idx < valid_keys.size(); ++idx)
+		{
+			const std::string& key = valid_keys[idx];
+			const auto& image_path = image_map[key];
+			
+			std::filesystem::path rel_path = std::filesystem::relative(image_path, source);
+			std::string subdir = rel_path.parent_path().string();
+			if (subdir.empty())
+			{
+				subdir = "."; // Root directory
+			}
+			
+			// Determine train/val assignment using same logic as YOLOv5/COCO
+			bool is_train = (idx < valid_keys.size() * train_percentage / 100.0);
+			subdir_assignments[subdir].push_back({key, is_train});
+		}
+		
+		VStr dst_images;
+		dst_images.reserve(all_images.size());
+		double work_completed = 0.0f;
+		const double work_to_be_done = valid_keys.size();
+		
+		// Process each subdirectory
+		for (const auto& [subdir, assignments] : subdir_assignments)
+		{
+			if (threadShouldExit()) break;
+			
+			Log("Processing subdirectory: " + subdir + " with " + std::to_string(assignments.size()) + " images");
+			
+			// Create train and val directories for this subdirectory
+			std::filesystem::path subdir_train = target / subdir / "train";
+			std::filesystem::path subdir_val = target / subdir / "val";
+			
+			std::error_code ec;
+			std::filesystem::create_directories(subdir_train, ec);
+			std::filesystem::create_directories(subdir_val, ec);
+			if (ec)
+			{
+				Log("Failed to create split directories for " + subdir + ": " + ec.message());
+				continue;
+			}
+			
+			// Copy files to train or val directories
+			for (const auto& [key, is_train] : assignments)
+			{
+				if (threadShouldExit()) break;
+				
+				setProgress(work_completed / work_to_be_done);
+				work_completed++;
+				
+				const auto& image_path = image_map[key];
+				std::filesystem::path src(image_path);
+				std::filesystem::path filename = src.filename();
+				
+				// Determine destination directory (train or val)
+				std::filesystem::path dst = is_train ? subdir_train / filename : subdir_val / filename;
+				
+				// Copy both image and annotation files
+				cp_files(src, dst);
+				number_of_files_copied++;
+				dst_images.push_back(dst.string());
+			}
+		}
+		
+		all_images.swap(dst_images);
+	}
+	else
+	{
+		// Original export logic (no split)
+		VStr dst_images;
+		dst_images.reserve(all_images.size());
+		double work_completed = 0.0f;
+		const double work_to_be_done = all_images.size();
+
+		for (size_t idx = 0; idx < all_images.size() and not threadShouldExit(); idx ++)
+		{
+			setProgress(work_completed / work_to_be_done);
+			work_completed ++;
+
+			std::filesystem::path src = all_images[idx];
+			std::filesystem::path dst = target / std::filesystem::relative(src, source);
+
+			if (export_all_images or std::filesystem::exists(std::filesystem::path(src).replace_extension(".txt")))
+			{
+				// this will copy both the image and the .txt annotation file (if it exists)
+				cp_files(src, dst);
+				number_of_files_copied ++;
+				dst_images.push_back(dst.string());
+			}
+		}
+
+		all_images.swap(dst_images);
+	}
 
 	return;
 }
@@ -723,7 +903,12 @@ std::string dm::ClassIdWnd::generate_unique_filename(const std::filesystem::path
 void dm::ClassIdWnd::run_export_yolov5()
 {
 	const std::filesystem::path source = dir.getFullPathName().toStdString();
-	const std::filesystem::path target = (source.string() + "_yolov5_export_" + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
+	std::string export_suffix = "_yolov5_export_";
+	if (export_with_split)
+	{
+		export_suffix = "_yolov5_export_split_";
+	}
+	const std::filesystem::path target = (source.string() + export_suffix + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
 	export_directory = target;
 
 	Log("YOLOv5 export dataset src=" + source.string());
@@ -786,6 +971,24 @@ void dm::ClassIdWnd::run_export_yolov5()
 		}
 	}
 
+	// Shuffle for split if enabled
+	if (export_with_split)
+	{
+		std::mt19937 g;
+		if (export_seed.has_value())
+		{
+			g.seed(*export_seed);
+			Log("Using deterministic seed " + std::to_string(*export_seed) + " for YOLOv5 export split");
+		}
+		else
+		{
+			std::random_device rd;
+			g.seed(rd());
+			Log("Using random seed for YOLOv5 export split");
+		}
+		std::shuffle(valid_keys.begin(), valid_keys.end(), g);
+	}
+
 	double work_completed = 0.0f;
 	const double work_to_be_done = valid_keys.size();
 
@@ -798,12 +1001,22 @@ void dm::ClassIdWnd::run_export_yolov5()
 
 		const auto& image_path = image_map[key];
 		
-		// Determine if this is train or val based on path
+		// Determine if this is train or val
 		bool is_train = true; // Default to train
-		std::string path_str = image_path.string();
-		if (path_str.find("val") != std::string::npos || path_str.find("valid") != std::string::npos)
+		
+		if (export_with_split)
 		{
-			is_train = false;
+			// Use deterministic split based on shuffle order
+			is_train = (work_completed < valid_keys.size() * train_percentage / 100.0);
+		}
+		else
+		{
+			// Use path-based detection (existing behavior)
+			std::string path_str = image_path.string();
+			if (path_str.find("val") != std::string::npos || path_str.find("valid") != std::string::npos)
+			{
+				is_train = false;
+			}
 		}
 
 		// Generate unique filename based on relative path
@@ -895,10 +1108,7 @@ void dm::ClassIdWnd::run()
 			run_export();
 		}
 	}
-	else if (is_splitting)
-	{
-		run_split();
-	}
+
 
 	std::ofstream ofs(names_fn);
 	if (ofs.good())
@@ -1586,7 +1796,12 @@ void dm::ClassIdWnd::count_images_and_marks()
 void dm::ClassIdWnd::run_export_coco()
 {
 	const std::filesystem::path source = dir.getFullPathName().toStdString();
-	const std::filesystem::path target = (source.string() + "_coco_export_" + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
+	std::string export_suffix = "_coco_export_";
+	if (export_with_split)
+	{
+		export_suffix = "_coco_export_split_";
+	}
+	const std::filesystem::path target = (source.string() + export_suffix + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
 	export_directory = target;
 
 	Log("COCO export dataset src=" + source.string());
@@ -1665,11 +1880,56 @@ void dm::ClassIdWnd::run_export_coco()
 
 	// Separate train and val images
 	std::vector<std::pair<std::string, std::filesystem::path>> train_images, val_images;
+	std::vector<std::pair<std::string, std::filesystem::path>> all_valid_images;
+	
 	for (const auto& [key, image_path] : image_map)
 	{
 		if (export_all_images || label_map.count(key))
 		{
-			// Determine if this is train or val based on path
+			all_valid_images.push_back({key, image_path});
+		}
+	}
+
+	if (export_with_split)
+	{
+		// Shuffle for split
+		std::mt19937 g;
+		if (export_seed.has_value())
+		{
+			g.seed(*export_seed);
+			Log("Using deterministic seed " + std::to_string(*export_seed) + " for COCO export split");
+		}
+		else
+		{
+			std::random_device rd;
+			g.seed(rd());
+			Log("Using random seed for COCO export split");
+		}
+		std::shuffle(all_valid_images.begin(), all_valid_images.end(), g);
+		
+		// Split based on percentage
+		const size_t total_images = all_valid_images.size();
+		const size_t train_count = static_cast<size_t>(total_images * train_percentage / 100.0);
+		
+		for (size_t i = 0; i < all_valid_images.size(); ++i)
+		{
+			if (i < train_count)
+			{
+				train_images.push_back(all_valid_images[i]);
+			}
+			else
+			{
+				val_images.push_back(all_valid_images[i]);
+			}
+		}
+		
+		Log("COCO split: " + std::to_string(train_images.size()) + " train, " + std::to_string(val_images.size()) + " val");
+	}
+	else
+	{
+		// Use path-based detection (existing behavior)
+		for (const auto& [key, image_path] : all_valid_images)
+		{
 			std::string path_str = image_path.string();
 			if (path_str.find("val") != std::string::npos || path_str.find("valid") != std::string::npos)
 			{
@@ -1951,179 +2211,4 @@ void dm::ClassIdWnd::generate_dataset_yaml(const std::filesystem::path & output_
 }
 
 
-void dm::ClassIdWnd::run_split()
-{
-	const std::filesystem::path source = dir.getFullPathName().toStdString();
-	const std::filesystem::path target = (source.string() + "_split_" + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
-	split_directory = target;
 
-	Log("split dataset src=" + source.string());
-	Log("split dataset dst=" + target.string());
-	Log("train percentage=" + std::to_string(train_percentage));
-
-	setStatusMessage("Splitting dataset to " + target.string() + "...");
-
-	// Copy the .names file to the split directory
-	std::filesystem::path names_source = names_fn;
-	std::filesystem::path names_target = target / names_source.filename();
-	std::error_code ec;
-	std::filesystem::create_directories(target, ec);
-	if (ec)
-	{
-		Log("Failed to create split directory: " + ec.message());
-		return;
-	}
-	
-	std::filesystem::copy_file(names_source, names_target, ec);
-	if (ec)
-	{
-		Log("Failed to copy .names file: " + ec.message());
-	}
-
-	// Find all subdirectories in the source directory
-	std::vector<std::filesystem::path> subdirs;
-	for (const auto& entry : std::filesystem::directory_iterator(source))
-	{
-		if (entry.is_directory())
-		{
-			subdirs.push_back(entry.path());
-		}
-	}
-
-	if (subdirs.empty())
-	{
-		Log("No subdirectories found in source directory");
-		return;
-	}
-
-	double total_work = 0.0;
-	// Count total files for progress tracking
-	for (const auto& subdir : subdirs)
-	{
-		for (const auto& entry : std::filesystem::directory_iterator(subdir))
-		{
-			if (entry.is_regular_file())
-			{
-				const auto ext = entry.path().extension().string();
-				if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp")
-				{
-					total_work += 1.0;
-				}
-			}
-		}
-	}
-
-	double work_completed = 0.0;
-	
-	// Process each subdirectory
-	for (const auto& subdir : subdirs)
-	{
-		if (threadShouldExit()) break;
-
-		const std::string subdir_name = subdir.filename().string();
-		Log("Processing subdirectory: " + subdir_name);
-
-		// Create train and val directories for this subdirectory
-		const std::filesystem::path train_dir = target / subdir_name / "train";
-		const std::filesystem::path val_dir = target / subdir_name / "val";
-		
-		std::filesystem::create_directories(train_dir, ec);
-		std::filesystem::create_directories(val_dir, ec);
-		if (ec)
-		{
-			Log("Failed to create directories for " + subdir_name + ": " + ec.message());
-			continue;
-		}
-
-		// Collect all image files in this subdirectory
-		std::vector<std::filesystem::path> image_files;
-		for (const auto& entry : std::filesystem::directory_iterator(subdir))
-		{
-			if (entry.is_regular_file())
-			{
-				const auto ext = entry.path().extension().string();
-				if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp")
-				{
-					image_files.push_back(entry.path());
-				}
-			}
-		}
-
-		if (image_files.empty())
-		{
-			Log("No image files found in " + subdir_name);
-			continue;
-		}
-
-		// Shuffle the files for random distribution
-		std::mt19937 g;
-		if (split_seed.has_value())
-		{
-			// Use deterministic seed for reproducible splits
-			g.seed(*split_seed);
-			Log("Using deterministic seed " + std::to_string(*split_seed) + " for " + subdir_name);
-		}
-		else
-		{
-			// Use random seed
-			std::random_device rd;
-			g.seed(rd());
-			Log("Using random seed for " + subdir_name);
-		}
-		std::shuffle(image_files.begin(), image_files.end(), g);
-
-		// Calculate split counts
-		const size_t total_images = image_files.size();
-		const size_t train_count = static_cast<size_t>(total_images * train_percentage / 100.0);
-		const size_t val_count = total_images - train_count;
-
-		Log("Splitting " + subdir_name + ": " + std::to_string(train_count) + " train, " + std::to_string(val_count) + " val");
-
-		// Copy files to train and val directories
-		for (size_t i = 0; i < image_files.size(); ++i)
-		{
-			if (threadShouldExit()) break;
-
-			setProgress(work_completed / total_work);
-			work_completed += 1.0;
-
-			const auto& image_path = image_files[i];
-			const bool to_train = (i < train_count);
-			const std::filesystem::path dest_dir = to_train ? train_dir : val_dir;
-			const std::filesystem::path dest_path = dest_dir / image_path.filename();
-
-			// Copy image file
-			std::filesystem::copy_file(image_path, dest_path, ec);
-			if (ec)
-			{
-				Log("Failed to copy image " + image_path.string() + ": " + ec.message());
-				continue;
-			}
-
-			number_of_files_copied++;
-
-			// Copy corresponding annotation files (.txt and .json if they exist)
-			std::vector<std::string> annotation_extensions = {".txt", ".json"};
-			for (const auto& ext : annotation_extensions)
-			{
-				const auto annotation_path = std::filesystem::path(image_path).replace_extension(ext);
-				if (std::filesystem::exists(annotation_path))
-				{
-					const auto dest_annotation_path = dest_dir / annotation_path.filename();
-					std::filesystem::copy_file(annotation_path, dest_annotation_path, ec);
-					if (ec)
-					{
-						Log("Failed to copy annotation " + annotation_path.string() + ": " + ec.message());
-					}
-					else
-					{
-						number_of_files_copied++;
-					}
-				}
-			}
-		}
-	}
-
-	Log("Split complete. Total files copied: " + std::to_string(number_of_files_copied));
-	return;
-}

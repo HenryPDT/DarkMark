@@ -8,34 +8,59 @@
 
 namespace dm
 {
-	class SplitDialog : public DocumentWindow, public Button::Listener
+	class ExportDialog : public DocumentWindow, public Button::Listener
 	{
 		public:
-			SplitDialog();
-			virtual ~SplitDialog();
+			ExportDialog();
+			virtual ~ExportDialog();
 			
 			virtual void closeButtonPressed() override;
 			virtual void userTriedToCloseWindow() override;
 			virtual void resized() override;
 			virtual void buttonClicked(Button * button) override;
 			
+			bool getExportAllImages() const { return export_all_images; }
+			bool getExportYolov5Format() const { return export_yolov5_format; }
+			bool getExportCocoFormat() const { return export_coco_format; }
+			bool getExportWithSplit() const { return cb_enable_split.getToggleState(); }
 			double getTrainPercentage() const { return sl_train_percentage.getValue(); }
 			int getSeed() const { return static_cast<int>(txt_seed.getText().getIntValue()); }
 			bool hasSeed() const { return !txt_seed.getText().isEmpty(); }
 			bool wasOkPressed() const { return ok_pressed; }
 			
 		private:
+			void updateSplitControls();
+			
 			Component canvas;
 			Label header_message;
-			Label txt_train_percentage;
+			
+			// Image selection
+			Label lbl_image_selection;
+			TextButton btn_all_images;
+			TextButton btn_annotated_only;
+			
+			// Format selection
+			Label lbl_format_selection;
+			TextButton btn_darknet_yolo;
+			TextButton btn_yolov5;
+			TextButton btn_coco;
+			
+			// Split options
+			ToggleButton cb_enable_split;
+			Label lbl_train_percentage;
 			Slider sl_train_percentage;
-			Label txt_val_percentage;
+			Label lbl_val_percentage;
 			Label lbl_seed;
 			TextEditor txt_seed;
 			Label help_seed;
+			
 			TextButton ok_button;
 			TextButton cancel_button;
+			
 			bool ok_pressed;
+			bool export_all_images;
+			bool export_yolov5_format;
+			bool export_coco_format;
 	};
 
 	class ClassIdWnd : public DocumentWindow, public Button::Listener, public ThreadWithProgressWindow, public TableListBoxModel
@@ -91,7 +116,6 @@ namespace dm
 			void run_export();
 			void run_export_yolov5();
 			void run_export_coco();
-			void run_split();
 			std::string generate_unique_filename(const std::filesystem::path& image_path, const std::filesystem::path& source);
 			void generate_dataset_yaml(const std::filesystem::path & output_folder);
 			void generate_coco_json(const std::vector<std::pair<std::string, std::filesystem::path>>& images, 
@@ -138,7 +162,6 @@ namespace dm
 			ArrowButton up_button;
 			ArrowButton down_button;
 			TextButton export_button;
-			TextButton split_button;
 			TextButton apply_button;
 			TextButton cancel_button;
 
@@ -165,10 +188,9 @@ namespace dm
 
 			std::filesystem::path export_directory;
 
-			// Split functionality variables
-			bool is_splitting;
+			// Export split functionality variables (integrated into export process)
+			bool export_with_split;
 			double train_percentage;
-			std::optional<int> split_seed;
-			std::filesystem::path split_directory;
+			std::optional<int> export_seed;
 	};
 }
