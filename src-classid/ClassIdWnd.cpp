@@ -491,8 +491,11 @@ std::string dm::ClassIdWnd::generate_unique_filename(const std::filesystem::path
 	// Get relative path from source
 	std::filesystem::path rel_path = std::filesystem::relative(image_path, source);
 	
-	// Convert path to string and replace directory separators with underscores
-	std::string path_str = rel_path.string();
+	// Get the original extension first
+	std::string extension = image_path.extension().string();
+	
+	// Convert path to string without extension and replace directory separators with underscores
+	std::string path_str = rel_path.replace_extension("").string();
 	
 	// Remove common directory names that don't add value
 	std::vector<std::string> to_remove = {"train/", "val/", "valid/", "images/", "labels/"};
@@ -509,9 +512,6 @@ std::string dm::ClassIdWnd::generate_unique_filename(const std::filesystem::path
 	std::replace(path_str.begin(), path_str.end(), '/', '_');
 	std::replace(path_str.begin(), path_str.end(), '\\', '_');
 	std::replace(path_str.begin(), path_str.end(), '.', '_');
-	
-	// Get the original extension
-	std::string extension = image_path.extension().string();
 	
 	// Remove any trailing underscores and add extension back
 	while (!path_str.empty() && path_str.back() == '_')
