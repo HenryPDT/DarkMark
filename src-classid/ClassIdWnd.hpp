@@ -11,7 +11,15 @@ namespace dm
 	class ExportDialog : public DocumentWindow, public Button::Listener
 	{
 		public:
-			ExportDialog();
+			// Callback interface for when dialog is dismissed
+			class Callback
+			{
+				public:
+					virtual ~Callback() = default;
+					virtual void exportDialogFinished(bool wasOkPressed, const ExportDialog* dialog) = 0;
+			};
+
+			ExportDialog(Callback* callback = nullptr);
 			virtual ~ExportDialog();
 			
 			virtual void closeButtonPressed() override;
@@ -30,7 +38,9 @@ namespace dm
 			
 		private:
 			void updateSplitControls();
+			void dismissDialog(bool okPressed);
 			
+			Callback* callback;
 			Component canvas;
 			Label header_message;
 			
@@ -63,7 +73,7 @@ namespace dm
 			bool export_coco_format;
 	};
 
-	class ClassIdWnd : public DocumentWindow, public Button::Listener, public ThreadWithProgressWindow, public TableListBoxModel
+	class ClassIdWnd : public DocumentWindow, public Button::Listener, public ThreadWithProgressWindow, public TableListBoxModel, public ExportDialog::Callback
 	{
 		public:
 
@@ -127,6 +137,9 @@ namespace dm
 									const std::filesystem::path& source,
 									double& work_completed,
 									const double work_to_be_done);
+
+			// ExportDialog::Callback implementation
+			virtual void exportDialogFinished(bool wasOkPressed, const ExportDialog* dialog) override;
 
 			void rebuild_table();
 
@@ -192,5 +205,8 @@ namespace dm
 			bool export_with_split;
 			double train_percentage;
 			std::optional<int> export_seed;
+
+			// Export dialog tracking
+			std::unique_ptr<ExportDialog> export_dialog;
 	};
 }
