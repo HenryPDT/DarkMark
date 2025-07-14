@@ -2209,9 +2209,6 @@ void dm::ClassIdWnd::exportDialogFinished(bool wasOkPressed, const ExportDialog*
 	// Re-enable the window
 	setEnabled(true);
 	
-	// Clean up the dialog
-	export_dialog.reset();
-	
 	if (wasOkPressed)
 	{
 		export_all_images = dialog->getExportAllImages();
@@ -2237,6 +2234,9 @@ void dm::ClassIdWnd::exportDialogFinished(bool wasOkPressed, const ExportDialog*
 		{
 			dm::Log("Export without split");
 		}
+		
+		// Now that all data is retrieved, it's safe to reset the dialog
+		export_dialog.reset();
 		
 		is_exporting = true;
 		runThread(); // calls run() and waits for it to be done
