@@ -319,5 +319,8 @@ namespace dm
 			int askUserForNumberOfFrames();
 			void handleMassDeleteArea(const cv::Rect &areaInScreenCoords);
 			size_t massDeleteMarks(const cv::Rect2d &selectionArea, int classIdx);
+
+			// Unified zoom setter for both keyboard and mouse scroll
+			void setZoom(double new_zoom_factor, cv::Point zoom_point);
 	};
 }

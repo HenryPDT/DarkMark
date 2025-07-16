@@ -655,3 +655,30 @@ void dm::DMCanvas::mouseDragFinished(juce::Rectangle<int> drag_rect, const Mouse
 
 	return;
 }
+
+
+void dm::DMCanvas::mouseWheelMove(const MouseEvent & event, const MouseWheelDetails & wheel)
+{
+    if (event.mods.isCtrlDown())
+    {
+        // Center zoom on the crosshair (mouse position)
+        const auto point = event.getPosition();
+        cv::Point zoom_point = cv::Point(
+            std::round((point.x + zoom_image_offset.x) / content.current_zoom_factor),
+            std::round((point.y + zoom_image_offset.y) / content.current_zoom_factor)
+        );
+        double zoom = content.user_specified_zoom_factor > 0.0 ? content.user_specified_zoom_factor : content.current_zoom_factor;
+        if (wheel.deltaY > 0.0f)
+        {
+            zoom += 0.1;
+        }
+        else if (wheel.deltaY < 0.0f)
+        {
+            zoom -= 0.1;
+        }
+        content.setZoom(zoom, zoom_point);
+        return;
+    }
+    // Default: scroll images
+    CrosshairComponent::mouseWheelMove(event, wheel);
+}

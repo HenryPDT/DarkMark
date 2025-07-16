@@ -207,7 +207,18 @@ void dm::DMContent::resized()
 		if (new_image_height	< canvas_height	) canvas_height	= new_image_height;
 	}
 
-	canvas.setBounds(0, 0, canvas_width, canvas_height);
+	// Calculate offsets to center the canvas if it's smaller than the available area
+	double available_width = window_width - scrollfield_width;
+	int offset_x = 0;
+	int offset_y = 0;
+	if (canvas_width < available_width) {
+		offset_x = static_cast<int>((available_width - canvas_width) / 2.0);
+	}
+	if (canvas_height < window_height) {
+		offset_y = static_cast<int>((window_height - canvas_height) / 2.0);
+	}
+
+	canvas.setBounds(offset_x, offset_y, canvas_width, canvas_height);
 	scrollfield.setBounds(window_width - scrollfield_width, 0, scrollfield_width, window_height);
 
 	// remember some of the important numbers so we don't have to re-calculate them later
@@ -665,52 +676,32 @@ bool dm::DMContent::keyPressed(const KeyPress & key)
 	}
 	else if (keychar == '-') // why is the value for KeyPress::numberPadSubtract unusable!?
 	{
-		if (user_specified_zoom_factor <= 0.0)
-		{
-			user_specified_zoom_factor = std::ceil(current_zoom_factor * 10.0) / 10.0;
-		}
-		user_specified_zoom_factor -= 0.1;
-
-		// use rounded zoom numbers -- so 0.19999 gets rounded to 0.2
-		user_specified_zoom_factor = std::round(user_specified_zoom_factor * 10.0) / 10.0;
-
-		if (user_specified_zoom_factor < 0.01)
-		{
-			user_specified_zoom_factor = 0.01;
-		}
-
-		resized();
-		rebuild_image_and_repaint();
-		show_message("zoom: " + std::to_string(static_cast<int>(user_specified_zoom_factor * 100.0)) + "%");
+		double zoom = user_specified_zoom_factor > 0.0 ? user_specified_zoom_factor : current_zoom_factor;
+		zoom -= 0.1;
+		setZoom(zoom, zoom_point_of_interest);
 		return true;
 	}
 	else if (keychar == '+') // why is the value for KeyPress::numberPadAdd unusable!?
 	{
-		Log("zoom factor was: " + std::to_string(current_zoom_factor));
-		Log("zoom point of interest was: x=" + std::to_string(zoom_point_of_interest.x) + " y=" + std::to_string(zoom_point_of_interest.y));
 		const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
-		Log("zoom mouse location now is: x=" + std::to_string(point.x) + " y=" + std::to_string(point.y));
-		zoom_point_of_interest.x = std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor);
-		zoom_point_of_interest.y = std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor);
-		Log("zoom point of interest now: x=" + std::to_string(zoom_point_of_interest.x) + " y=" + std::to_string(zoom_point_of_interest.y));
-
+		cv::Point zoom_point = cv::Point(
+			std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor),
+			std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor)
+		);
+		double zoom = user_specified_zoom_factor > 0.0 ? user_specified_zoom_factor : current_zoom_factor;
 		if (key.getModifiers().isShiftDown()) // with SHIFT we immediately skip to 500%
 		{
-			user_specified_zoom_factor = 5.0;
+			zoom = 5.0;
 		}
 		else
 		{
-			user_specified_zoom_factor = std::round(current_zoom_factor * 10.0 + 1.0) / 10.0;
-			if (user_specified_zoom_factor > 5.0)
+			zoom = std::round(current_zoom_factor * 10.0 + 1.0) / 10.0;
+			if (zoom > 5.0)
 			{
-				user_specified_zoom_factor = 5.0;
+				zoom = 5.0;
 			}
 		}
-		Log("zoom factor now: " + std::to_string(user_specified_zoom_factor));
-
-		resized();
-		rebuild_image_and_repaint();
-		show_message("zoom: " + std::to_string(static_cast<int>(user_specified_zoom_factor * 100.0)) + "%");
+		setZoom(zoom, zoom_point);
 		return true;
 	}
 	else if (keycode == KeyPress::spaceKey)
@@ -3364,4 +3355,16 @@ dm::DMContent& dm::DMContent::remove_annotations(const std::string& image_filena
 	}
 
 	return *this;
+}
+
+void dm::DMContent::setZoom(double new_zoom_factor, cv::Point zoom_point)
+{
+    // Clamp zoom
+    if (new_zoom_factor < 0.01) new_zoom_factor = 0.01;
+    if (new_zoom_factor > 5.0) new_zoom_factor = 5.0;
+    user_specified_zoom_factor = std::round(new_zoom_factor * 10.0) / 10.0;
+    zoom_point_of_interest = zoom_point;
+    resized();
+    rebuild_image_and_repaint();
+    show_message("zoom: " + std::to_string(static_cast<int>(user_specified_zoom_factor * 100.0)) + "%");
 }
