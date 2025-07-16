@@ -1790,6 +1790,12 @@ bool dm::DMContent::load_json()
 				p.y = root["mark"][idx]["points"][point_idx]["y"];
 				m.normalized_all_points.push_back(p);
 			}
+			// Set the image size for the mark before rebalance
+			if (root.contains("image") && root["image"].contains("width") && root["image"].contains("height")) {
+				m.image_dimensions = cv::Size(root["image"]["width"], root["image"]["height"]);
+			} else {
+				m.image_dimensions = original_image.size();
+			}
 			m.rebalance();
 			marks.push_back(m);
 		}
@@ -1822,6 +1828,36 @@ dm::DMContent & dm::DMContent::show_darknet_window()
 	return *this;
 }
 
+dm::DMContent & dm::DMContent::delete_image(const std::string & fn_to_delete)
+{
+	auto it = std::find(image_filenames.begin(), image_filenames.end(), fn_to_delete);
+	if (it != image_filenames.end())
+	{
+		size_t deleted_idx = it - image_filenames.begin();
+
+		need_to_save = false;
+		File f(*it);
+		Log("deleting the file: " + f.getFullPathName().toStdString());
+
+		f.moveToTrash();
+		f.withFileExtension(".txt").moveToTrash();
+		f.withFileExtension(".json").moveToTrash();
+
+		image_filenames.erase(it);
+
+		if (deleted_idx == image_filename_index)
+		{
+			load_image(image_filename_index); // load what's now at this index
+		}
+		else if (deleted_idx < image_filename_index)
+		{
+			image_filename_index--;
+		}
+
+		scrollfield.rebuild_entire_field_on_thread();
+	}
+	return *this;
+}
 
 dm::DMContent & dm::DMContent::delete_current_image()
 {
@@ -3239,4 +3275,93 @@ void dm::DMContent::handleMassDeleteArea(const cv::Rect &areaInScreenCoords)
 	show_message("Number of marks of type \"" + names[massDeleteClassIdx] + "\" deleted: " + std::to_string(counter) + ".");
 
 	return;
+}
+
+
+dm::DMContent& dm::DMContent::remove_annotations(const std::string& image_filename, const std::vector<cv::Rect>& rects_to_remove)
+{
+	// Find the index of the specified image in the image_filenames vector
+	size_t target_image_idx = 0;
+	bool image_found = false;
+	for (; target_image_idx < image_filenames.size(); ++target_image_idx)
+	{
+		if (image_filenames[target_image_idx] == image_filename)
+		{
+			image_found = true;
+			break;
+		}
+	}
+
+	if (!image_found)
+	{
+		return *this;
+	}
+
+	// If the target image is not currently loaded, save any pending changes to the current image first
+	if (target_image_idx != image_filename_index && need_to_save)
+	{
+		save_json();
+		save_text();
+	}
+
+	// Load the target image if it's not currently loaded
+	if (target_image_idx != image_filename_index)
+	{
+		load_image(target_image_idx, true, false);
+	}
+
+	// Create a new vector of marks, excluding any non-prediction marks whose bounding box matches one in rects_to_remove
+	std::vector<Mark> new_marks;
+	bool marks_removed = false;
+
+	for (const auto& mark : marks)
+	{
+		// Skip prediction marks - we only want to remove user-created annotations
+		if (mark.is_prediction)
+		{
+			new_marks.push_back(mark);
+			continue;
+		}
+
+		// Get the bounding rectangle for this mark
+		cv::Rect mark_rect = mark.get_bounding_rect();
+		
+		// Check if this mark's bounding box matches any of the rectangles to remove
+		bool should_remove = false;
+		for (const auto& rect_to_remove : rects_to_remove)
+		{
+			if (mark_rect == rect_to_remove)
+			{
+				should_remove = true;
+				marks_removed = true;
+				break;
+			}
+		}
+
+		// Keep the mark if it shouldn't be removed
+		if (!should_remove)
+		{
+			new_marks.push_back(mark);
+		}
+	}
+
+	// Update the marks vector and save if any marks were removed
+	if (marks_removed)
+	{
+		marks = new_marks;
+		need_to_save = true;
+		// Save the changes to disk
+		save_json();
+		save_text();
+		// If we just modified the currently loaded image, refresh the canvas and scrollfield
+		if (target_image_idx == image_filename_index) {
+			rebuild_image_and_repaint();
+			if (scrollfield_width > 0) {
+				scrollfield.update_index(image_filename_index);
+				scrollfield.need_to_rebuild_cache_image = true;
+			}
+		}
+	}
+
+	return *this;
 }

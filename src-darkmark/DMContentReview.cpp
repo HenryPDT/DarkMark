@@ -153,10 +153,26 @@ void dm::DMContentReview::run()
 				break;
 			}
 
-			const int x = std::round(mat.cols * mark["rect"]["x"].get<double>());
-			const int y = std::round(mat.rows * mark["rect"]["y"].get<double>());
-			const int w = std::round(mat.cols * mark["rect"]["w"].get<double>());
-			const int h = std::round(mat.rows * mark["rect"]["h"].get<double>());
+			// Use integer coordinates from JSON if available, otherwise fall back to normalized calculation
+			// This ensures consistent cv::Rect creation across the application
+			int x, y, w, h;
+			if (mark["rect"].contains("int_x") && mark["rect"].contains("int_y") && 
+				mark["rect"].contains("int_w") && mark["rect"].contains("int_h"))
+			{
+				// Use the integer coordinates stored in the JSON for consistency
+				x = mark["rect"]["int_x"].get<int>();
+				y = mark["rect"]["int_y"].get<int>();
+				w = mark["rect"]["int_w"].get<int>();
+				h = mark["rect"]["int_h"].get<int>();
+			}
+			else
+			{
+				// Fallback to the old calculation method for compatibility with older JSON files
+				x = std::round(mat.cols * mark["rect"]["x"].get<double>());
+				y = std::round(mat.rows * mark["rect"]["y"].get<double>());
+				w = std::round(mat.cols * mark["rect"]["w"].get<double>());
+				h = std::round(mat.rows * mark["rect"]["h"].get<double>());
+			}
 			const cv::Rect r(x, y, w, h);
 
 			all_rectangles.push_back(r);
@@ -180,10 +196,27 @@ void dm::DMContentReview::run()
 			}
 
 			size_t class_idx = mark["class_idx"].get<size_t>();
-			const int x = std::round(mat.cols * mark["rect"]["x"].get<double>());
-			const int y = std::round(mat.rows * mark["rect"]["y"].get<double>());
-			const int w = std::round(mat.cols * mark["rect"]["w"].get<double>());
-			const int h = std::round(mat.rows * mark["rect"]["h"].get<double>());
+			
+			// Use integer coordinates from JSON if available, otherwise fall back to normalized calculation
+			// This ensures consistent cv::Rect creation across the application
+			int x, y, w, h;
+			if (mark["rect"].contains("int_x") && mark["rect"].contains("int_y") && 
+				mark["rect"].contains("int_w") && mark["rect"].contains("int_h"))
+			{
+				// Use the integer coordinates stored in the JSON for consistency
+				x = mark["rect"]["int_x"].get<int>();
+				y = mark["rect"]["int_y"].get<int>();
+				w = mark["rect"]["int_w"].get<int>();
+				h = mark["rect"]["int_h"].get<int>();
+			}
+			else
+			{
+				// Fallback to the old calculation method for compatibility with older JSON files
+				x = std::round(mat.cols * mark["rect"]["x"].get<double>());
+				y = std::round(mat.rows * mark["rect"]["y"].get<double>());
+				w = std::round(mat.cols * mark["rect"]["w"].get<double>());
+				h = std::round(mat.rows * mark["rect"]["h"].get<double>());
+			}
 			const cv::Rect r1(x, y, w, h);
 
 			ReviewInfo review_info;

@@ -92,6 +92,8 @@ namespace dm
 
 			DMContent & show_darknet_window();
 
+			DMContent & delete_image(const std::string& fn_to_delete);
+
 			DMContent & delete_current_image();
 
 			/** Attempt to copy the marks from the given image (or rather, from the corresponding .json file).
@@ -156,6 +158,8 @@ namespace dm
 			DMContent & create_threshold_image();
 
 			bool snap_annotation(int idx);
+
+			DMContent& remove_annotations(const std::string& image_filename, const std::vector<cv::Rect>& rects_to_remove);
 
 			/// The text prefix used to store keys in configuration.  This differs for every project.
 			std::string cfg_prefix;

@@ -34,7 +34,7 @@ namespace dm
 	typedef std::map<size_t, MReviewInfo> MMReviewInfo;
 
 	/// Also see the class @ref DMReviewCanvas which is the content shown in the notebook.
-	class DMReviewWnd : public DocumentWindow
+	class DMReviewWnd : public DocumentWindow, public ChangeListener
 	{
 		public:
 
@@ -46,6 +46,7 @@ namespace dm
 			virtual void userTriedToCloseWindow();
 
 			void rebuild_notebook();
+			virtual void changeListenerCallback(ChangeBroadcaster* source) override;
 
 			DMContent & content;
 			Notebook notebook;

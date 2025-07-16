@@ -72,7 +72,7 @@ void dm::DMReviewWnd::rebuild_notebook()
 	for (auto iter : m)
 	{
 		const size_t class_idx = iter.first;
-		const MReviewInfo & mri = m.at(class_idx);
+		MReviewInfo & mri = m.at(class_idx);
 
 		std::string name = "#" + std::to_string(class_idx);
 		if (content.names.size() > class_idx)
@@ -87,8 +87,40 @@ void dm::DMReviewWnd::rebuild_notebook()
 
 		Log("creating a notebook tab for class \"" + name + "\", mri has " + std::to_string(mri.size()) + " entries");
 
-		notebook.addTab(name, Colours::darkgrey, new DMReviewCanvas(mri, md5s), true);
+		auto* canvas = new DMReviewCanvas(content, mri, md5s);
+		canvas->addChangeListener(this);
+		notebook.addTab(name, Colours::darkgrey, canvas, true);
 	}
 
 	return;
+}
+
+void dm::DMReviewWnd::changeListenerCallback(ChangeBroadcaster* source)
+{
+	DMReviewCanvas* canvas = dynamic_cast<DMReviewCanvas*>(source);
+	if (canvas)
+	{
+		// Something in one of the canvases has changed. This is currently only triggered when an image is removed.
+		// We need to synchronize our data model with the main image list to remove entries for deleted images.
+		SStr current_filenames(content.image_filenames.begin(), content.image_filenames.end());
+
+		for (auto& pair : m)
+		{
+			MReviewInfo& class_mri = pair.second;
+			for (auto it = class_mri.begin(); it != class_mri.end(); )
+			{
+				if (current_filenames.find(it->second.filename) == current_filenames.end())
+				{
+					it = class_mri.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		// Now that the data model is clean, rebuild all canvases.
+		rebuild_notebook();
+	}
 }

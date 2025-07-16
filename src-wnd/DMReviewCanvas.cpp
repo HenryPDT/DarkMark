@@ -3,10 +3,13 @@
 #include "DarkMark.hpp"
 
 
-dm::DMReviewCanvas::DMReviewCanvas(const MReviewInfo & m, const MStrSize & md5s) :
+dm::DMReviewCanvas::DMReviewCanvas(DMContent & c, MReviewInfo & m, const MStrSize & md5s) :
+	content(c),
 	mri(m),
 	md5s(md5s)
 {
+	setMultipleSelectionEnabled(true);
+
 	const int h = cfg().get_int("review_table_row_height");
 	if (h > getRowHeight())
 	{
@@ -38,9 +41,9 @@ dm::DMReviewCanvas::DMReviewCanvas(const MReviewInfo & m, const MStrSize & md5s)
 
 	sort_idx.clear();
 	sort_idx.reserve(mri.size());
-	for (size_t i = 0; i < mri.size(); i ++)
+	for (const auto& pair : mri)
 	{
-		sort_idx.push_back(i);
+		sort_idx.push_back(pair.first);
 	}
 
 	setModel(this);
@@ -65,6 +68,11 @@ int dm::DMReviewCanvas::getNumRows()
 
 void dm::DMReviewCanvas::cellDoubleClicked(int rowNumber, int columnId, const MouseEvent & event)
 {
+	goToAnnotation(rowNumber);
+}
+
+void dm::DMReviewCanvas::goToAnnotation(int rowNumber)
+{
 	// rows are 0-based, columns are 1-based
 	if (rowNumber >= 0 and rowNumber < (int)mri.size())
 	{
@@ -72,8 +80,8 @@ void dm::DMReviewCanvas::cellDoubleClicked(int rowNumber, int columnId, const Mo
 		const std::string & fn = review_info.filename;
 
 		// we know which image we want to load, but we need the index of that image within the vector of image filenames
-
-		const VStr & image_filenames = dmapp().wnd->content.image_filenames;
+		
+		const VStr & image_filenames = content.image_filenames;
 		size_t idx = 0;
 		while (true)
 		{
@@ -82,24 +90,21 @@ void dm::DMReviewCanvas::cellDoubleClicked(int rowNumber, int columnId, const Mo
 				idx = 0;
 				break;
 			}
-
 			if (image_filenames.at(idx) == fn)
 			{
 				break;
 			}
-
 			idx ++;
 		}
-
 		// jump out of "zoom" mode before we switch to the next image
-		dmapp().wnd->content.zoom_point_of_interest = cv::Size(0, 0);
-		dmapp().wnd->content.user_specified_zoom_factor = -1.0;
+		content.zoom_point_of_interest = cv::Size(0, 0);
+		content.user_specified_zoom_factor = -1.0;
 
-		dmapp().wnd->content.load_image(idx);
+		content.load_image(idx);
 #if 0
 		// see if the review window is hiding the rectangle we want to highlight
 		auto r1 = localAreaToGlobal(Rectangle<int>(0, 0, getWidth(), getHeight()));
-		auto r2 = dmapp().wnd->content.localAreaToGlobal(Rectangle<int>(review_info.r.x, review_info.r.y, review_info.r.width, review_info.r.height));
+		auto r2 = content.localAreaToGlobal(Rectangle<int>(review_info.r.x, review_info.r.y, review_info.r.width, review_info.r.height));
 
 		Log("r1: x=" + std::to_string(r1.getX()) + " y=" + std::to_string(r1.getY()) + " w=" + std::to_string(r1.getWidth()) + " h=" + std::to_string(r1.getHeight()));
 		Log("r2: x=" + std::to_string(r2.getX()) + " y=" + std::to_string(r2.getY()) + " w=" + std::to_string(r2.getWidth()) + " h=" + std::to_string(r2.getHeight()));
@@ -109,12 +114,150 @@ void dm::DMReviewCanvas::cellDoubleClicked(int rowNumber, int columnId, const Mo
 			dmapp().review_wnd->setMinimised(true);
 		}
 #endif
-		dmapp().wnd->content.highlight_rectangle(review_info.r);
+		content.highlight_rectangle(review_info.r);
 	}
-
-	return;
 }
 
+void dm::DMReviewCanvas::removeAnnotations(const SparseSet<int>& selectedRows)
+{
+	if (selectedRows.isEmpty()) return;
+
+	// Group rectangles by filename for efficient processing
+	std::map<std::string, std::vector<cv::Rect>> fileToRects;
+	for (int i = 0; i < selectedRows.getNumRanges(); ++i)
+	{
+		auto range = selectedRows.getRange(i);
+		for (int row = range.getStart(); row < range.getEnd(); ++row)
+		{
+			if (row >= 0 && row < (int)sort_idx.size())
+			{
+				const auto& review_info = mri.at(sort_idx[row]);
+				fileToRects[review_info.filename].push_back(review_info.r);
+			}
+		}
+	}
+
+	// Use the centralized remove_annotations method for each file
+	for (const auto& [filename, rects_to_remove] : fileToRects)
+	{
+		content.remove_annotations(filename, rects_to_remove);
+	}
+
+	// Update the review canvas UI by removing the processed entries
+	SId mri_keys_to_remove;
+	for (int i = 0; i < selectedRows.getNumRanges(); ++i)
+	{
+		auto range = selectedRows.getRange(i);
+		for (int row = range.getStart(); row < range.getEnd(); ++row)
+		{
+			if (row >= 0 && row < (int)sort_idx.size())
+			{
+				mri_keys_to_remove.insert(sort_idx[row]);
+			}
+		}
+	}
+	
+	// Remove the processed entries from the review info map
+	for (auto key : mri_keys_to_remove)
+	{
+		mri.erase(key);
+	}
+	
+	// Update the sort index to reflect the removed entries
+	std::vector<size_t> new_sort_idx;
+	for (auto key : sort_idx)
+	{
+		if (mri_keys_to_remove.find(key) == mri_keys_to_remove.end())
+		{
+			new_sort_idx.push_back(key);
+		}
+	}
+	sort_idx = new_sort_idx;
+	
+	// Refresh the UI
+	updateContent();
+	repaint();
+}
+
+void dm::DMReviewCanvas::removeImage(const SparseSet<int>& selectedRows)
+{
+	if (selectedRows.isEmpty()) return;
+
+	SStr filenames_to_remove;
+	for (int i = 0; i < selectedRows.getNumRanges(); ++i)
+	{
+		auto range = selectedRows.getRange(i);
+		for (int row = range.getStart(); row < range.getEnd(); ++row)
+		{
+			if (row >= 0 && row < (int)sort_idx.size())
+			{
+				filenames_to_remove.insert(mri.at(sort_idx[row]).filename);
+			}
+		}
+	}
+
+	// Delete the images from content
+	for (const auto& filename : filenames_to_remove)
+	{
+		content.delete_image(filename);
+	}
+
+	// Remove the processed entries from the review info map
+	SId mri_keys_to_remove;
+	for (size_t i = 0; i < sort_idx.size(); ++i)
+	{
+		const auto& review_info = mri.at(sort_idx[i]);
+		if (filenames_to_remove.find(review_info.filename) != filenames_to_remove.end())
+		{
+			mri_keys_to_remove.insert(sort_idx[i]);
+		}
+	}
+	for (auto key : mri_keys_to_remove)
+	{
+		mri.erase(key);
+	}
+
+	// Update the sort index to reflect the removed entries
+	std::vector<size_t> new_sort_idx;
+	for (auto key : sort_idx)
+	{
+		if (mri_keys_to_remove.find(key) == mri_keys_to_remove.end())
+		{
+			new_sort_idx.push_back(key);
+		}
+	}
+	sort_idx = new_sort_idx;
+
+	// Refresh the UI
+	updateContent();
+	repaint();
+}
+
+void dm::DMReviewCanvas::cellClicked(int rowNumber, int columnId, const MouseEvent& event)
+{
+	if (event.mods.isRightButtonDown())
+	{
+		auto selectedRows = getSelectedRows();
+		if (!selectedRows.contains(rowNumber))
+		{
+			selectRow(rowNumber);
+			selectedRows.clear();
+			selectedRows.addRange(juce::Range<int>(rowNumber, rowNumber + 1));
+		}
+
+		PopupMenu m;
+		m.addItem(1, "Go to annotation");
+		m.addItem(2, juce::String("Remove Bounding Box") + (selectedRows.size() > 1 ? "es" : ""));
+		m.addItem(3, juce::String("Remove Image") + (selectedRows.size() > 1 ? "s" : ""));
+
+		m.showMenuAsync(PopupMenu::Options(), [this, selectedRows](int result)
+		{
+			if (result == 1) goToAnnotation(selectedRows.size() > 0 ? selectedRows[0] : -1);
+			if (result == 2) removeAnnotations(selectedRows);
+			if (result == 3) removeImage(selectedRows);
+		});
+	}
+}
 
 String dm::DMReviewCanvas::getCellTooltip(int rowNumber, int columnId)
 {
@@ -124,7 +267,7 @@ String dm::DMReviewCanvas::getCellTooltip(int rowNumber, int columnId)
 		const auto & review_info = mri.at(sort_idx[rowNumber]);
 		const std::string & fn = review_info.filename;
 
-		return "double click to open " + fn;
+		return "Double-click to go to annotation. Right-click for more options.\n" + fn;
 	}
 
 	return "";
@@ -366,7 +509,7 @@ void dm::DMReviewCanvas::sortOrderChanged(int newSortColumnId, bool isForwards)
 		return;
 	}
 
-	const size_t class_idx = mri.at(0).class_idx;
+	const size_t class_idx = mri.begin()->second.class_idx;
 	Log("sorting " + std::to_string(sort_idx.size()) + " rows of data for class #" + std::to_string(class_idx) + " using column #" + std::to_string(newSortColumnId));
 
 	std::sort(sort_idx.begin(), sort_idx.end(),
