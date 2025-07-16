@@ -343,9 +343,9 @@ void dm::CrosshairComponent::mouseWheelMove(const MouseEvent & event, const Mous
 
 	if (change != 0)
 	{
-		content.load_image(idx + change, false, true);
+		content.load_image(idx + change, true, true); // Immediately do a full load
 
-		startTimer(500); // request a callback -- in milliseconds -- at which point in time we'll fully load this image
+		// startTimer(500); // request a callback -- in milliseconds -- at which point in time we'll fully load this image
 	}
 
 	Component::mouseWheelMove(event, wheel);
