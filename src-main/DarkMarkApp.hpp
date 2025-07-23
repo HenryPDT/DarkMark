@@ -3,6 +3,7 @@
 #pragma once
 
 #include "DarkMark.hpp"
+#include "OnnxHelp.hpp"
 
 
 namespace dm
@@ -32,6 +33,7 @@ namespace dm
 			TooltipWindow tool_tip;
 
 			std::unique_ptr<Cfg>				cfg;
+			std::unique_ptr<OnnxHelp::NN>		onnx_nn;
 			std::unique_ptr<DMWnd>				wnd;
 			std::unique_ptr<DarkHelp::NN>		darkhelp_nn;
 			std::unique_ptr<DMStatsWnd>			stats_wnd;
@@ -82,5 +84,11 @@ namespace dm
 	inline DarkHelp::NN & darkhelp_nn()
 	{
 		return *dmapp().darkhelp_nn;
+	}
+
+	/// Quick and easy access to OnnxHelp.  Will throw if the application does not exist.
+	inline OnnxHelp::NN & onnx_nn()
+	{
+		return *dmapp().onnx_nn;
 	}
 }

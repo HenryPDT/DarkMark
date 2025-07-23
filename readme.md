@@ -46,6 +46,54 @@ If you are using WSL2, Docker, or a Linux distro that does not come with the def
 
     sudo apt-get install fonts-liberation
 
+## ONNX Runtime C++ Dependency
+
+To enable auto-annotation with ONNX models, you need the ONNX Runtime C++ library.
+
+**Manual Setup:**
+
+1. Download the latest ONNX Runtime C++ package for your platform from:
+   https://github.com/microsoft/onnxruntime/releases
+
+   - For Linux: download the `onnxruntime-linux-x64-<version>.tgz`
+   - For Windows: download the `onnxruntime-win-x64-<version>.zip`
+
+2. Extract the archive to `/usr/local/onnxruntime` (or `/usr/onnxruntime`), so you have:
+   ```
+   /usr/local/onnxruntime/lib/
+   /usr/local/onnxruntime/include/
+   ```
+   For example:
+   ```sh
+   sudo tar -xzf onnxruntime-linux-x64-<version>.tgz -C /usr/local
+   sudo mv /usr/local/onnxruntime-linux-x64-<version> /usr/local/onnxruntime
+   sudo ldconfig
+   ```
+
+4. CMake will automatically detect and use the system-installed ONNX Runtime.
+
+**Note:**
+- CMake will not auto-download ONNX Runtime. You must perform the above steps before configuring the project.
+- If the ONNX Runtime library is not found, CMake will stop with an error.
+
+**Quick install example for ONNX Runtime 1.22.0 on Linux:**
+```sh
+wget https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
+sudo tar -xzf onnxruntime-linux-x64-1.22.0.tgz -C /usr/local
+sudo mv /usr/local/onnxruntime-linux-x64-1.22.0 /usr/local/onnxruntime
+sudo ldconfig
+```
+
+**Note:**
+If you install ONNX Runtime to `/usr/local/onnxruntime`, you must add its `lib` directory to the system library path so the dynamic linker can find `libonnxruntime.so.1` at runtime. To do this, run:
+
+```sh
+echo "/usr/local/onnxruntime/lib" | sudo tee /etc/ld.so.conf.d/onnxruntime.conf
+sudo ldconfig
+```
+
+This only needs to be done once after installing or updating ONNX Runtime.
+
 # Doxygen Output
 
 The official DarkMark documentation and web site is at <https://www.ccoderun.ca/darkmark/>.

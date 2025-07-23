@@ -344,7 +344,7 @@ void dm::StartupCanvas::find_all_darknet_files()
 
 		const String extension =
 				type == DarknetFileInfo::EType::kCfg	?	"*.cfg"		:
-				type == DarknetFileInfo::EType::kWeight	?	"*.weights" :
+				type == DarknetFileInfo::EType::kWeight	?	"*.weights, *.onnx" :
 															"*.name*"	;
 
 		File dir(project_directory.toString());
@@ -762,31 +762,40 @@ void dm::StartupCanvas::filter_out_extra_weight_files()
 			continue;
 		}
 
-		// otherwise if we get here then we have a .weights file, so check to see if this is one we want to keep
+		// Apply filtering logic to both .weights and .onnx files
+		bool is_weights = false, is_onnx = false;
+		if (info.full_name.size() >= 8 && info.full_name.substr(info.full_name.size() - 8) == ".weights")
+			is_weights = true;
+		else if (info.full_name.size() >= 5 && info.full_name.substr(info.full_name.size() - 5) == ".onnx")
+			is_onnx = true;
 
-		if (md5s.empty()													or
-			info.short_name.find("_best.weights")	!= std::string::npos	or
-			info.short_name.find("_last.weights")	!= std::string::npos	or
-			info.short_name.find("_final.weights")	!= std::string::npos	)
+		if (is_weights || is_onnx)
 		{
-			Log("calculating MD5 checksum for " + info.full_name);
-			const std::string md5 = MD5(File(info.full_name)).toHexString().toStdString();
-			if (md5s.count(md5) == 0)
+			if (md5s.empty() ||
+				info.short_name.find("_best" + std::string(is_weights ? ".weights" : ".onnx")) != std::string::npos ||
+				info.short_name.find("_last" + std::string(is_weights ? ".weights" : ".onnx")) != std::string::npos ||
+				info.short_name.find("_final" + std::string(is_weights ? ".weights" : ".onnx")) != std::string::npos)
 			{
-				Log("keeping the file " + info.full_name + " (md5=" + md5 + ")");
-				new_files.push_back(info);
-				md5s.insert(md5);
+				Log("calculating MD5 checksum for " + info.full_name);
+				const std::string md5 = MD5(File(info.full_name)).toHexString().toStdString();
+				if (md5s.count(md5) == 0)
+				{
+					Log("keeping the file " + info.full_name + " (md5=" + md5 + ")");
+					new_files.push_back(info);
+					md5s.insert(md5);
+				}
+				else
+				{
+					Log("skipping the file due to duplicate MD5 sum: " + info.full_name);
+					extra_weights_files.insert(info.full_name);
+				}
 			}
 			else
 			{
-				Log("skipping the file due to duplicate MD5 sum: " + info.full_name);
+				Log("skipping the intermediate file " + info.full_name);
 				extra_weights_files.insert(info.full_name);
 			}
-		}
-		else
-		{
-			Log("skipping the intermediate file " + info.full_name);
-			extra_weights_files.insert(info.full_name);
+			continue;
 		}
 	}
 

@@ -19,6 +19,7 @@ ADD_EXECUTABLE ( DarkMark
 			$<TARGET_OBJECTS:dm_launcher>
 			$<TARGET_OBJECTS:dm_classid>
 			$<TARGET_OBJECTS:dm_wnd>
+			$<TARGET_OBJECTS:dm_onnx>
 			${APP_WIN32_ICON}
 			)
 

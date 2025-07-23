@@ -1,6 +1,7 @@
 // DarkMark (C) 2019-2024 Stephane Charette <stephanecharette@gmail.com>
 
 #include "DarkMark.hpp"
+#include "OnnxHelp.hpp"
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -259,20 +260,50 @@ void dm::DMContent::resized()
 void dm::DMContent::start_darknet()
 {
 	Log("loading darknet neural network");
-	const std::string darknet_cfg		= cfg().get_str(cfg_prefix + "cfg"		);
-	const std::string darknet_weights	= cfg().get_str(cfg_prefix + "weights"	);
-	const std::string darknet_names		= cfg().get_str(cfg_prefix + "names"	);
+	const std::string weights_filename	= cfg().get_str(cfg_prefix + "weights"	);
+	const std::string names_filename	= cfg().get_str(cfg_prefix + "names"	);
 	names.clear();
 
-	if (darknet_cfg		.empty() == false	and
-		darknet_weights	.empty() == false	and
-		File(darknet_cfg).existsAsFile()	and
-		File(darknet_weights).existsAsFile())
+	dmapp().darkhelp_nn.reset(nullptr);
+	dmapp().onnx_nn.reset(nullptr);
+
+	if (weights_filename.empty() == false and String(weights_filename).endsWith(".onnx"))
+	{
+		if (File(weights_filename).existsAsFile() and File(names_filename).existsAsFile())
+		{
+			try
+			{
+				Log("manually parsing " + names_filename);
+				std::ifstream ifs(names_filename);
+				std::string line;
+				while (std::getline(ifs, line))
+				{
+					line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+					line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
+					if (!line.empty()) names.push_back(line);
+				}
+				
+				Log("attempting to load ONNX model " + weights_filename);
+				dmapp().onnx_nn.reset(new OnnxHelp::NN(weights_filename, names));
+				Log("ONNX model loaded.");
+			}
+			catch (const std::exception & e)
+			{
+				dmapp().onnx_nn.reset(nullptr);
+				Log("failed to load ONNX model (" + weights_filename + "): " + e.what());
+				AlertWindow::showMessageBoxAsync(
+					AlertWindow::AlertIconType::WarningIcon, "DarkMark",
+					"Failed to load ONNX model. The error was:\n\n" + String(e.what()));
+			}
+		}
+	}
+	else if (File(weights_filename).existsAsFile())
 	{
 		try
 		{
-			Log("attempting to load neural network " + darknet_cfg + " / " + darknet_weights + " / " + darknet_names);
-			dmapp().darkhelp_nn.reset(new DarkHelp::NN(darknet_cfg, darknet_weights, darknet_names));
+			const std::string darknet_cfg = cfg().get_str(cfg_prefix + "cfg");
+			Log("attempting to load neural network " + darknet_cfg + " / " + weights_filename + " / " + names_filename);
+			dmapp().darkhelp_nn.reset(new DarkHelp::NN(darknet_cfg, weights_filename, names_filename));
 			Log("neural network loaded in " + darkhelp_nn().duration_string());
 
 			darkhelp_nn().config.threshold							= cfg().get_int("darknet_threshold")			/ 100.0f;
@@ -298,7 +329,7 @@ void dm::DMContent::start_darknet()
 		catch (const std::exception & e)
 		{
 			dmapp().darkhelp_nn.reset(nullptr);
-			Log("failed to load darknet (cfg=" + darknet_cfg + ", weights=" + darknet_weights + ", names=" + darknet_names + "): " + e.what());
+			Log("failed to load darknet (weights=" + weights_filename + ", names=" + names_filename + "): " + e.what());
 			if (show_window)
 			{
 				AlertWindow::showMessageBoxAsync(
@@ -313,7 +344,7 @@ void dm::DMContent::start_darknet()
 	else
 	{
 		dmapp().darkhelp_nn.reset(nullptr);
-		Log("skipped loading darknet due to missing or invalid .cfg or .weights filenames");
+		Log("skipped loading neural network due to missing or invalid weights filename");
 #if 0
 		if (show_window)
 		{
@@ -325,10 +356,10 @@ void dm::DMContent::start_darknet()
 #endif
 	}
 
-	if (names.empty() and darknet_names.empty() == false)
+	if (names.empty() and names_filename.empty() == false)
 	{
-		Log("manually parsing " + darknet_names);
-		std::ifstream ifs(darknet_names);
+		Log("manually parsing " + names_filename);
+		std::ifstream ifs(names_filename);
 		std::string line;
 		while (std::getline(ifs, line))
 		{
@@ -1339,6 +1370,29 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 					{
 						Mark m(prediction.original_point, prediction.original_size, original_image.size(), prediction.best_class);
 						m.name = names.at(m.class_idx);
+						m.description = prediction.name;
+						m.is_prediction = true;
+						marks.push_back(m);
+					}
+				}
+				else if (dmapp().onnx_nn)
+				{
+					task = "getting predictions with ONNX";
+					auto start_time = std::chrono::high_resolution_clock::now();
+					auto results = onnx_nn().predict(original_image);
+					auto end_time = std::chrono::high_resolution_clock::now();
+					double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+					darknet_image_processing_time = std::to_string(duration_ms) + " ms (ONNX)";
+					Log("ONNX processed " + short_filename + " in " + darknet_image_processing_time);
+
+					task = "converting ONNX predictions";
+					for (auto& prediction : results)
+					{
+						Mark m;
+						m.image_dimensions = original_image.size();
+						m.set(prediction.rect);
+						m.class_idx = prediction.class_idx;
+						m.name = prediction.name;
 						m.description = prediction.name;
 						m.is_prediction = true;
 						marks.push_back(m);
@@ -3102,7 +3156,7 @@ void dm::DMContent::interpolateMarks(const std::vector<Mark> & startMarks, const
 	}
 	else
 	{
-		// If we’re going backward in the image list:
+		// If we're going backward in the image list:
 		for (size_t frameIdx = startIdx - 1; frameIdx > endIdx; --frameIdx)
 		{
 			float t = float(startIdx - frameIdx) / float(startIdx - endIdx);
