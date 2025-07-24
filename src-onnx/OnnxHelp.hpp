@@ -31,6 +31,7 @@ namespace OnnxHelp
 			PredictionResults predict(cv::Mat image, float conf_threshold = 0.3f, float nms_threshold = 0.45f);
 
 		private:
+			static Ort::SessionOptions GetSessionOptions();
 			Ort::Env env;
 			Ort::Session session;
 			Ort::AllocatorWithDefaultOptions allocator;

@@ -56,7 +56,17 @@ To enable auto-annotation with ONNX models, you need the ONNX Runtime C++ librar
    https://github.com/microsoft/onnxruntime/releases
 
    - For Linux: download the `onnxruntime-linux-x64-<version>.tgz`
+   - For GPU support (Linux with CUDA): download `onnxruntime-linux-x64-gpu-<version>.tgz`
    - For Windows: download the `onnxruntime-win-x64-<version>.zip`
+   - For GPU support (Windows with CUDA): download `onnxruntime-win-x64-gpu-<version>.zip`
+
+   DarkMark will automatically detect and use the CUDA execution provider for GPU acceleration if you install a GPU-enabled version of ONNX Runtime.
+
+**Important:** For GPU support, you need both CUDA and cuDNN installed on your system:
+- **CUDA**: Install from [NVIDIA's website](https://developer.nvidia.com/cuda-downloads)
+- **cuDNN**: Download from [NVIDIA's cuDNN page](https://developer.nvidia.com/cudnn) (requires free NVIDIA account)
+
+**Compatibility:** Refer to the [ONNX Runtime CUDA Execution Provider requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html#requirements) for detailed compatibility information between ONNX Runtime versions, CUDA versions, and cuDNN versions.
 
 2. Extract the archive to `/usr/local/onnxruntime` (or `/usr/onnxruntime`), so you have:
    ```
@@ -75,6 +85,7 @@ To enable auto-annotation with ONNX models, you need the ONNX Runtime C++ librar
 **Note:**
 - CMake will not auto-download ONNX Runtime. You must perform the above steps before configuring the project.
 - If the ONNX Runtime library is not found, CMake will stop with an error.
+- If you encounter CUDA-related errors like "libcudnn.so.9: cannot open shared object file", ensure both CUDA and cuDNN are properly installed and the libraries are in your system's library path.
 
 **Quick install example for ONNX Runtime 1.22.0 on Linux:**
 ```sh

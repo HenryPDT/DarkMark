@@ -7,10 +7,39 @@
 
 namespace OnnxHelp
 {
+Ort::SessionOptions NN::GetSessionOptions()
+{
+	Ort::SessionOptions session_options;
+	session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
+	// Try to use CUDA execution provider if available
+	auto available_providers = Ort::GetAvailableProviders();
+	bool cuda_available = false;
+	for (const auto& p : available_providers)
+	{
+		if (p == "CUDAExecutionProvider")
+		{
+			cuda_available = true;
+			break;
+		}
+	}
+
+	if (cuda_available)
+	{
+		dm::Log("ONNX Runtime: Using CUDA execution provider.");
+		OrtCUDAProviderOptions cuda_options{};
+		session_options.AppendExecutionProvider_CUDA(cuda_options);
+	}
+	else
+	{
+		dm::Log("ONNX Runtime: CUDA execution provider not available. Using CPU.");
+	}
+
+	return session_options;
+}
 NN::NN(const std::string & onnx_filename, const std::vector<std::string>& class_names, const cv::Size& input_size) :
 	env(ORT_LOGGING_LEVEL_WARNING, "YOLOX-DarkMark"),
-	session(env, onnx_filename.c_str(), Ort::SessionOptions{ nullptr }),
+	session(env, onnx_filename.c_str(), GetSessionOptions()),
 	memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
 	input_size(input_size),
 	class_names(class_names)
