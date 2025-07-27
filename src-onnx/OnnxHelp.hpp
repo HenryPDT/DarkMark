@@ -26,14 +26,24 @@ namespace OnnxHelp
 	class NN
 	{
 		public:
-			NN(const std::string & onnx_filename, const std::vector<std::string>& class_names, const cv::Size& input_size = cv::Size(640, 640));
+			NN(const std::string & onnx_filename, const std::vector<std::string>& class_names);
 			~NN();
-			PredictionResults predict(cv::Mat image, float conf_threshold = 0.3f, float nms_threshold = 0.45f);
+			PredictionResults predict(const cv::Mat& image, float conf_threshold = 0.3f, float nms_threshold = 0.45f) const;
+			
+			// Check if the model has dynamic input dimensions
+			bool is_dynamic() const { return is_dynamic_input; }
+			
+			// Set custom input size for dynamic models (ignored for static models)
+			void set_input_size(const cv::Size& size);
+			
+			// Get current input size
+			cv::Size get_input_size() const { return input_size; }
 
 		private:
 			static Ort::SessionOptions GetSessionOptions();
+			static cv::Size GetModelInputSize(Ort::Session& session, bool& is_dynamic);
 			Ort::Env env;
-			Ort::Session session;
+			mutable Ort::Session session;
 			Ort::AllocatorWithDefaultOptions allocator;
 			Ort::MemoryInfo memory_info;
 
@@ -41,8 +51,15 @@ namespace OnnxHelp
 			std::vector<Ort::AllocatedStringPtr> output_node_names_char;
 
 			cv::Size input_size;
+			bool is_dynamic_input;
 			std::vector<std::string> class_names;
 
-			void resize_unscale(const cv::Mat& mat, cv::Mat& mat_rs, float& ratio);
+			// Cached vectors to avoid repeated allocations
+			mutable std::vector<float> input_tensor_values;
+			mutable std::vector<int64_t> input_shape;
+			mutable std::vector<const char*> input_names;
+			mutable std::vector<const char*> output_names;
+
+			void resize_unscale(const cv::Mat& mat, cv::Mat& mat_rs, float& ratio) const;
 	};
 }

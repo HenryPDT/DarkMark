@@ -285,6 +285,21 @@ void dm::DMContent::start_darknet()
 				
 				Log("attempting to load ONNX model " + weights_filename);
 				dmapp().onnx_nn.reset(new OnnxHelp::NN(weights_filename, names));
+				
+				// Check if this is a dynamic model and set custom input size if configured
+				if (dmapp().onnx_nn && dmapp().onnx_nn->is_dynamic())
+				{
+					int configured_width = cfg().get_int(cfg_prefix + "onnx_input_width");
+					int configured_height = cfg().get_int(cfg_prefix + "onnx_input_height");
+					
+					if (configured_width > 0 && configured_height > 0)
+					{
+						cv::Size custom_size(configured_width, configured_height);
+						dmapp().onnx_nn->set_input_size(custom_size);
+						Log("Set custom input size for dynamic ONNX model: " + std::to_string(configured_width) + "x" + std::to_string(configured_height));
+					}
+				}
+				
 				Log("ONNX model loaded.");
 			}
 			catch (const std::exception & e)
@@ -3081,7 +3096,7 @@ void dm::DMContent::interpolateMarks(const std::vector<Mark> & startMarks, const
 	std::string retained_name = startMark.name;
 	std::string retained_desc = startMark.description;
 
-	// Determine which way we’re interpolating (startIdx < endIdx or vice versa).
+	// Determine which way we're interpolating (startIdx < endIdx or vice versa).
 	const size_t startIdx	= merge_start_index;
 	const size_t endIdx		= image_filename_index;
 
@@ -3208,7 +3223,7 @@ int dm::DMContent::showClassSelectionMenu()
 
 size_t dm::DMContent::massDeleteMarksForward(const cv::Rect2d &selectionArea, int classIdx, int framesAhead)
 {
-	// current index is the frame we’re on
+	// current index is the frame we're on
 	size_t startIndex = image_filename_index;
 	size_t counter = 0;
 

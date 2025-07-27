@@ -76,6 +76,8 @@ namespace dm
 		Value inclusion_regex;
 		Value exclusion_regex;
 		Value darknet_network_dimensions;
+		Value onnx_input_size;
+		Value onnx_is_dynamic;
 		Value darknet_configuration_template;
 		Value darknet_configuration_filename;
 		Value darknet_weights_filename;
@@ -87,9 +89,15 @@ namespace dm
 
 		SStr extra_weights_files;
 		ToggleButton hide_some_weight_files;
+		
+		PropertyComponent* onnx_input_size_property;  // Reference to the ONNX input size property for editability control
+		PropertyComponent* onnx_model_type_property;  // Reference to the ONNX model type property for editability control
+		PropertyComponent* darknet_template_property;  // Reference to the Darknet template property for editability control
+		PropertyComponent* darknet_config_property;    // Reference to the Darknet config property for editability control
 
 		std::atomic<bool> applying_filter;
 		std::atomic<bool> done;
+		std::atomic<bool> initializing;  // Flag to prevent validation during initialization
 		std::thread t;
 
 		VDarknetFileInfo v;
