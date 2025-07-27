@@ -86,6 +86,10 @@ dm::SettingsWnd::SettingsWnd(dm::DMContent & c) :
 		v_image_tiling									= cfg().get_bool("darknet_image_tiling");
 	}
 
+	// Initialize ONNX threshold settings
+	v_onnx_threshold = cfg().get_int("onnx_threshold");
+	v_onnx_nms_threshold = cfg().get_int("onnx_nms_threshold");
+
 	v_scrollfield_width			= content.scrollfield_width;
 	v_scrollfield_marker_size	= content.scrollfield.triangle_size;
 	v_show_mouse_pointer		= content.show_mouse_pointer;
@@ -115,6 +119,8 @@ dm::SettingsWnd::SettingsWnd(dm::DMContent & c) :
 	v_darkhelp_threshold						.addListener(this);
 //	v_darkhelp_hierchy_threshold				.addListener(this);
 	v_darkhelp_non_maximal_suppression_threshold.addListener(this);
+	v_onnx_threshold							.addListener(this);
+	v_onnx_nms_threshold						.addListener(this);
 	v_scrollfield_width							.addListener(this);
 	v_scrollfield_marker_size					.addListener(this);
 	v_show_mouse_pointer						.addListener(this);
@@ -163,6 +169,14 @@ dm::SettingsWnd::SettingsWnd(dm::DMContent & c) :
 
 	s = new SliderPropertyComponent(v_darkhelp_non_maximal_suppression_threshold, "nms threshold", 0, 100, 1);
 	s->setTooltip("Non-Maximal Suppression (NMS) suppresses overlapping bounding boxes and only retains the bounding box that has the maximum probability of object detection associated with it. It examines all bounding boxes and removes the least confident of the boxes that overlap with each other. Default value is 45%.");
+	properties.add(s);
+
+	s = new SliderPropertyComponent(v_onnx_threshold, "ONNX detection threshold", 0, 100, 1);
+	s->setTooltip("ONNX detection threshold is used to determine whether or not there is an object in the predicted bounding box. Default value is 30%.");
+	properties.add(s);
+
+	s = new SliderPropertyComponent(v_onnx_nms_threshold, "ONNX nms threshold", 0, 100, 1);
+	s->setTooltip("ONNX Non-Maximal Suppression (NMS) suppresses overlapping bounding boxes and only retains the bounding box that has the maximum probability of object detection associated with it. Default value is 45%.");
 	properties.add(s);
 
 	b = new BooleanPropertyComponent(v_image_tiling, "enable image tiling", "enable image tiling");
@@ -426,6 +440,10 @@ void dm::SettingsWnd::valueChanged(Value & value)
 		dmapp().darkhelp_nn->config.threshold							= static_cast<float>(v_darkhelp_threshold							.getValue()) / 100.0f;
 		dmapp().darkhelp_nn->config.enable_tiles						= static_cast<bool>(v_image_tiling.getValue());
 	}
+	
+	// Save ONNX threshold settings to configuration
+	cfg().setValue("onnx_threshold", static_cast<int>(v_onnx_threshold.getValue()));
+	cfg().setValue("onnx_nms_threshold", static_cast<int>(v_onnx_nms_threshold.getValue()));
 	content.scrollfield_width					= v_scrollfield_width					.getValue();
 	content.scrollfield.triangle_size			= v_scrollfield_marker_size				.getValue();
 	content.show_mouse_pointer					= v_show_mouse_pointer					.getValue();

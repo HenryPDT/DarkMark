@@ -663,6 +663,20 @@ bool dm::DMContent::keyPressed(const KeyPress & key)
 				show_message("darknet threshold: " + std::to_string((int)std::round(100.0 * threshold)) + "%");
 			}
 		}
+		else if (dmapp().onnx_nn)
+		{
+			int threshold = cfg().get_int("onnx_threshold");
+
+			threshold += (keycode == KeyPress::upKey ? 5 : -5);
+			threshold = std::min(std::max(threshold, 5), 95);
+
+			if (threshold != cfg().get_int("onnx_threshold"))
+			{
+				cfg().setValue("onnx_threshold", threshold);
+				load_image(image_filename_index);
+				show_message("ONNX threshold: " + std::to_string(threshold) + "%");
+			}
+		}
 		return true;
 	}
 	else if (keycode == KeyPress::deleteKey and key.getModifiers().isShiftDown())
@@ -1394,7 +1408,12 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 				{
 					task = "getting predictions with ONNX";
 					auto start_time = std::chrono::high_resolution_clock::now();
-					auto results = onnx_nn().predict(original_image);
+					
+					// Get configured thresholds
+					float conf_threshold = cfg().get_int("onnx_threshold") / 100.0f;
+					float nms_threshold = cfg().get_int("onnx_nms_threshold") / 100.0f;
+					
+					auto results = onnx_nn().predict(original_image, conf_threshold, nms_threshold);
 					auto end_time = std::chrono::high_resolution_clock::now();
 					double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 					darknet_image_processing_time = std::to_string(duration_ms) + " ms (ONNX)";
@@ -2362,7 +2381,7 @@ PopupMenu dm::DMContent::create_popup_menu()
 	PopupMenu review;
 	review.addItem("zoom-and-review"		, std::function<void()>( [&]{ zoom_and_review();	} ));
 	review.addItem("review annotations..."	, std::function<void()>( [&]{ review_marks();		} ));
-	if (dmapp().darkhelp_nn)
+	if (dmapp().darkhelp_nn or dmapp().onnx_nn)
 	{
 		review.addItem("review IoU..."		, std::function<void()>( [&]{ review_iou();			} ));
 	}

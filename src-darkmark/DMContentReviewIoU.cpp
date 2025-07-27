@@ -1,6 +1,7 @@
 // DarkMark (C) 2019-2024 Stephane Charette <stephanecharette@gmail.com>
 
 #include "DarkMark.hpp"
+#include "OnnxHelp.hpp"
 
 #include <darknet.hpp>
 
@@ -9,7 +10,7 @@ using json = nlohmann::json;
 
 
 dm::DMContentReviewIoU::DMContentReviewIoU(dm::DMContent & c) :
-	ThreadWithProgressWindow("Predicting With Darknet/YOLO...", true, true),
+	ThreadWithProgressWindow("Predicting With Neural Network...", true, true),
 	content(c)
 {
 	return;
@@ -85,8 +86,28 @@ void dm::DMContentReviewIoU::run()
 		const cv::Size desired_size(std::round(size_factor * row_height), row_height);
 		info.thumbnail = DarkHelp::fast_resize_ignore_aspect_ratio(mat, desired_size);
 
-		const auto results = dmapp().darkhelp_nn->predict(mat);
-		info.number_of_predictions = results.size();
+		// Get predictions from the appropriate neural network
+		std::vector<DarkHelp::PredictionResult> darkhelp_results;
+		std::vector<OnnxHelp::PredictionResult> onnx_results;
+		
+		if (dmapp().darkhelp_nn)
+		{
+			darkhelp_results = dmapp().darkhelp_nn->predict(mat);
+			info.number_of_predictions = darkhelp_results.size();
+		}
+		else if (dmapp().onnx_nn)
+		{
+			// Get configured thresholds
+			float conf_threshold = cfg().get_int("onnx_threshold") / 100.0f;
+			float nms_threshold = cfg().get_int("onnx_nms_threshold") / 100.0f;
+			
+			onnx_results = dmapp().onnx_nn->predict(mat, conf_threshold, nms_threshold);
+			info.number_of_predictions = onnx_results.size();
+		}
+		else
+		{
+			info.number_of_predictions = 0;
+		}
 
 		SId classes_annotations_without_predictions;
 		SId classes_predictions_without_annotations;
@@ -112,32 +133,68 @@ void dm::DMContentReviewIoU::run()
 			std::multimap<double, size_t> mm;
 
 			// look through the predictions and see if we can find a match
-			for (size_t idx = 0; idx < results.size(); idx ++)
+			if (dmapp().darkhelp_nn)
 			{
-				if (threadShouldExit())
+				// Handle DarkHelp predictions
+				for (size_t idx = 0; idx < darkhelp_results.size(); idx ++)
 				{
-					break;
+					if (threadShouldExit())
+					{
+						break;
+					}
+
+					if (prediction_index_consumed.count(idx))
+					{
+						// this prediction was already consumed by a previous annotation
+						continue;
+					}
+
+					const auto & pred = darkhelp_results.at(idx);
+
+					if (pred.all_probabilities.count(class_idx) == 0)
+					{
+						// this prediction has 0% chance to match the class_idx so look for something else
+						continue;
+					}
+
+					// if we get here then the class index matches, so now compare the IoU
+					const double iou = Darknet::iou(mark_r, pred.rect);
+					if (iou > 0.0)
+					{
+						mm.insert({iou, idx});
+					}
 				}
-
-				if (prediction_index_consumed.count(idx))
+			}
+			else if (dmapp().onnx_nn)
+			{
+				// Handle ONNX predictions
+				for (size_t idx = 0; idx < onnx_results.size(); idx ++)
 				{
-					// this prediction was already consumed by a previous annotation
-					continue;
-				}
+					if (threadShouldExit())
+					{
+						break;
+					}
 
-				const auto & pred = results.at(idx);
+					if (prediction_index_consumed.count(idx))
+					{
+						// this prediction was already consumed by a previous annotation
+						continue;
+					}
 
-				if (pred.all_probabilities.count(class_idx) == 0)
-				{
-					// this prediction has 0% chance to match the class_idx so look for something else
-					continue;
-				}
+					const auto & pred = onnx_results.at(idx);
 
-				// if we get here then the class index matches, so now compare the IoU
-				const double iou = Darknet::iou(mark_r, pred.rect);
-				if (iou > 0.0)
-				{
-					mm.insert({iou, idx});
+					if (pred.class_idx != class_idx)
+					{
+						// this prediction doesn't match the class_idx so look for something else
+						continue;
+					}
+
+					// if we get here then the class index matches, so now compare the IoU
+					const double iou = Darknet::iou(mark_r, pred.rect);
+					if (iou > 0.0)
+					{
+						mm.insert({iou, idx});
+					}
 				}
 			}
 
@@ -199,13 +256,29 @@ void dm::DMContentReviewIoU::run()
 			info.average_iou = 0.0;
 		}
 
-		for (size_t idx = 0; idx < results.size(); idx ++)
+		// Process predictions without annotations
+		if (dmapp().darkhelp_nn)
 		{
-			if (prediction_index_consumed.count(idx) == 0)
+			for (size_t idx = 0; idx < darkhelp_results.size(); idx ++)
 			{
-				const auto best_class = results.at(idx).best_class;
-				classes_predictions_without_annotations.insert(best_class);
-				info.number_of_predictions_without_annotations ++;
+				if (prediction_index_consumed.count(idx) == 0)
+				{
+					const auto best_class = darkhelp_results.at(idx).best_class;
+					classes_predictions_without_annotations.insert(best_class);
+					info.number_of_predictions_without_annotations ++;
+				}
+			}
+		}
+		else if (dmapp().onnx_nn)
+		{
+			for (size_t idx = 0; idx < onnx_results.size(); idx ++)
+			{
+				if (prediction_index_consumed.count(idx) == 0)
+				{
+					const auto best_class = onnx_results.at(idx).class_idx;
+					classes_predictions_without_annotations.insert(best_class);
+					info.number_of_predictions_without_annotations ++;
+				}
 			}
 		}
 

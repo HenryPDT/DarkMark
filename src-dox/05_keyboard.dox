@@ -6,8 +6,8 @@ Key							| Saves Modified Marks First	| Description
 ----------------------------|-------------------------------|------------
 @p LEFT						| yes							| Go to previous image.  If at the first image, do nothing.
 @p RIGHT					| yes							| Go to the next image.  If at the last image, do nothing.
-@p UP						|								| Increase Darknet threshold.
-@p DOWN						|								| Decrease Darknet threshold.
+@p UP						|								| Increase neural network threshold (Darknet or ONNX).
+@p DOWN						|								| Decrease neural network threshold (Darknet or ONNX).
 @p PAGEUP					| yes							| Go to the previous image which has not yet been marked.  (Also see @p 'Y'.)
 @p PAGEDOWN					| yes							| Go to the next image which has not yet been marked.  (Also see @p 'y'.)
 @p HOME						| yes							| Go to the first image.
@@ -64,5 +64,7 @@ In addition to these keyboard shortcuts, note the following mouse behaviour:
 @li While creating a new mark or resizing an existing mark, you can hold down @p SHIFT to alter the snap behaviour.  If snap is disabled, then holding down @p SHIFT when you let go of the mouse button will temporarily enable snapping.  If snap is enabled, then holding down @p SHIFT when you let go of the mouse button will temporarily disable snapping.  (Snapping is usually toggled with @p d and @p D.)
 
 @li While dragging the mouse on a zoomed-in image, hold down @p CTRL to pan the image.  (Or press @p SPACE to zoom out and back in.)
+
+@li Hold down @p CTRL and scroll the mouse wheel to zoom in/out of the image.  The zoom will be centered on the mouse cursor position.
 
 */
