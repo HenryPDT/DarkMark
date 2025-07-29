@@ -750,8 +750,9 @@ void dm::ClassIdWnd::run_export()
 		else
 		{
 			std::random_device rd;
-			g.seed(rd());
-			Log("Using random seed for Darknet export split");
+			int random_seed = rd();
+			g.seed(random_seed);
+			Log("Using random seed " + std::to_string(random_seed) + " for Darknet export split");
 		}
 		std::shuffle(valid_keys.begin(), valid_keys.end(), g);
 
@@ -965,6 +966,7 @@ void dm::ClassIdWnd::run_export_yolov5()
 	}
 
 	// Shuffle for split if enabled
+	std::optional<int> actual_seed_used = export_seed; // Track the actual seed used
 	if (export_with_split)
 	{
 		std::mt19937 g;
@@ -976,8 +978,10 @@ void dm::ClassIdWnd::run_export_yolov5()
 		else
 		{
 			std::random_device rd;
-			g.seed(rd());
-			Log("Using random seed for YOLOv5 export split");
+			int random_seed = rd();
+			g.seed(random_seed);
+			actual_seed_used = random_seed; // Capture the generated random seed
+			Log("Using random seed " + std::to_string(random_seed) + " for YOLOv5 export split");
 		}
 		std::shuffle(valid_keys.begin(), valid_keys.end(), g);
 	}
@@ -1041,19 +1045,7 @@ void dm::ClassIdWnd::run_export_yolov5()
 	}
 
 	// Generate dataset.yaml
-	generate_dataset_yaml(target);
-
-	// Copy .cfg files (for compatibility)
-	for (const auto & entry : std::filesystem::directory_iterator(source))
-	{
-		if (entry.is_regular_file() and
-			entry.file_size() > 0 and
-			entry.path().extension() == ".cfg")
-		{
-			const std::filesystem::path dst = target / entry.path().filename();
-			std::filesystem::copy_file(entry.path(), dst, ec);
-		}
-	}
+	generate_dataset_yaml(target, export_with_split, train_percentage, actual_seed_used);
 
 	return;
 }
@@ -1883,6 +1875,7 @@ void dm::ClassIdWnd::run_export_coco()
 		}
 	}
 
+	std::optional<int> actual_seed_used = export_seed; // Track the actual seed used
 	if (export_with_split)
 	{
 		// Shuffle for split
@@ -1895,8 +1888,10 @@ void dm::ClassIdWnd::run_export_coco()
 		else
 		{
 			std::random_device rd;
-			g.seed(rd());
-			Log("Using random seed for COCO export split");
+			int random_seed = rd();
+			g.seed(random_seed);
+			actual_seed_used = random_seed; // Capture the generated random seed
+			Log("Using random seed " + std::to_string(random_seed) + " for COCO export split");
 		}
 		std::shuffle(all_valid_images.begin(), all_valid_images.end(), g);
 		
@@ -1945,20 +1940,8 @@ void dm::ClassIdWnd::run_export_coco()
 	const double work_to_be_done = train_images.size() + val_images.size();
 
 	// Generate COCO JSON files
-	generate_coco_json(train_images, label_map, class_names, train_images_dir, annotations_dir / "instances_train2017.json", "train", source, work_completed, work_to_be_done);
-	generate_coco_json(val_images, label_map, class_names, val_images_dir, annotations_dir / "instances_val2017.json", "val", source, work_completed, work_to_be_done);
-
-	// Copy .cfg files (for compatibility)
-	for (const auto & entry : std::filesystem::directory_iterator(source))
-	{
-		if (entry.is_regular_file() and
-			entry.file_size() > 0 and
-			entry.path().extension() == ".cfg")
-		{
-			const std::filesystem::path dst = target / entry.path().filename();
-			std::filesystem::copy_file(entry.path(), dst, ec);
-		}
-	}
+	generate_coco_json(train_images, label_map, class_names, train_images_dir, annotations_dir / "instances_train2017.json", "train", source, work_completed, work_to_be_done, export_with_split, train_percentage, actual_seed_used);
+	generate_coco_json(val_images, label_map, class_names, val_images_dir, annotations_dir / "instances_val2017.json", "val", source, work_completed, work_to_be_done, export_with_split, train_percentage, actual_seed_used);
 
 	return;
 }
@@ -1972,7 +1955,10 @@ void dm::ClassIdWnd::generate_coco_json(const std::vector<std::pair<std::string,
 										const std::string& mode,
 										const std::filesystem::path& source,
 										double& work_completed,
-										const double work_to_be_done)
+										const double work_to_be_done,
+										bool with_split,
+										double train_percentage,
+										const std::optional<int>& seed)
 {
 	// Create COCO JSON structure
 	std::ostringstream json_stream;
@@ -1987,7 +1973,21 @@ void dm::ClassIdWnd::generate_coco_json(const std::vector<std::pair<std::string,
 	json_stream << "    \"description\": \"Dataset exported from DarkMark v" << DARKMARK_VERSION << "\",\n";
 	json_stream << "    \"contributor\": \"DarkMark\",\n";
 	json_stream << "    \"url\": \"https://github.com/stephanecharette/DarkMark\",\n";
-	json_stream << "    \"date_created\": \"" << now.formatted("%Y-%m-%d").toStdString() << "\"\n";
+	json_stream << "    \"date_created\": \"" << now.formatted("%Y-%m-%d").toStdString() << "\"";
+	
+	// Add split information if applicable
+	if (with_split)
+	{
+		json_stream << ",\n";
+		json_stream << "    \"split\": {\n";
+		json_stream << "      \"enabled\": true,\n";
+		json_stream << "      \"train_percentage\": " << std::fixed << std::setprecision(1) << train_percentage << ",\n";
+		json_stream << "      \"seed\": " << seed.value() << ",\n";
+		json_stream << "      \"seed_note\": \"Use this seed for reproducible splits\"\n";
+		json_stream << "    }";
+	}
+	
+	json_stream << "\n";
 	json_stream << "  },\n";
 	
 	// Licenses section
@@ -2146,7 +2146,7 @@ void dm::ClassIdWnd::generate_coco_json(const std::vector<std::pair<std::string,
 }
 
 
-void dm::ClassIdWnd::generate_dataset_yaml(const std::filesystem::path & output_folder)
+void dm::ClassIdWnd::generate_dataset_yaml(const std::filesystem::path & output_folder, bool with_split, double train_percentage, const std::optional<int>& seed)
 {
 	// Read class names from .names file
 	std::vector<std::string> class_names;
@@ -2187,6 +2187,17 @@ void dm::ClassIdWnd::generate_dataset_yaml(const std::filesystem::path & output_
 		ofs << "path: " << std::filesystem::absolute(output_folder).string() << "\n";
 		ofs << "train: images/train\n";
 		ofs << "val: images/val\n\n";
+		
+		// Add split information if applicable
+		if (with_split)
+		{
+			ofs << "# Split configuration\n";
+			ofs << "split:\n";
+			ofs << "  enabled: true\n";
+			ofs << "  train_percentage: " << std::fixed << std::setprecision(1) << train_percentage << "\n";
+			ofs << "  seed: " << seed.value() << "  # Use this seed for reproducible splits\n";
+			ofs << "\n";
+		}
 		
 		ofs << "names:\n";
 		for (size_t i = 0; i < class_names.size(); ++i)

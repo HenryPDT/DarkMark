@@ -127,7 +127,7 @@ namespace dm
 			void run_export_yolov5();
 			void run_export_coco();
 			std::string generate_unique_filename(const std::filesystem::path& image_path, const std::filesystem::path& source);
-			void generate_dataset_yaml(const std::filesystem::path & output_folder);
+			void generate_dataset_yaml(const std::filesystem::path & output_folder, bool with_split = false, double train_percentage = 80.0, const std::optional<int>& seed = std::nullopt);
 			void generate_coco_json(const std::vector<std::pair<std::string, std::filesystem::path>>& images, 
 									const std::map<std::string, std::filesystem::path>& label_map,
 									const std::vector<std::string>& class_names,
@@ -136,7 +136,10 @@ namespace dm
 									const std::string& mode,
 									const std::filesystem::path& source,
 									double& work_completed,
-									const double work_to_be_done);
+									const double work_to_be_done,
+									bool with_split = false,
+									double train_percentage = 80.0,
+									const std::optional<int>& seed = std::nullopt);
 
 			// ExportDialog::Callback implementation
 			virtual void exportDialogFinished(bool wasOkPressed, const ExportDialog* dialog) override;
