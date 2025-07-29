@@ -177,6 +177,9 @@ void dm::DMReviewCanvas::removeAnnotations(const SparseSet<int>& selectedRows)
 	// Refresh the UI
 	updateContent();
 	repaint();
+
+	// Clear selection highlight after deletion
+	deselectAllRows();
 }
 
 void dm::DMReviewCanvas::removeImage(const SparseSet<int>& selectedRows)
@@ -231,6 +234,9 @@ void dm::DMReviewCanvas::removeImage(const SparseSet<int>& selectedRows)
 	// Refresh the UI
 	updateContent();
 	repaint();
+
+	// Clear selection highlight after deletion
+	deselectAllRows();
 }
 
 void dm::DMReviewCanvas::cellClicked(int rowNumber, int columnId, const MouseEvent& event)
