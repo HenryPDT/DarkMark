@@ -33,7 +33,7 @@ namespace OnnxHelp
 			// Check if the model has dynamic input dimensions
 			bool is_dynamic() const { return is_dynamic_input; }
 			
-			// Set custom input size for dynamic models (ignored for static models)
+			// Set custom input size for models with dynamic height/width dimensions (ignored for static models)
 			void set_input_size(const cv::Size& size);
 			
 			// Get current input size

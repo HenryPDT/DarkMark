@@ -286,7 +286,7 @@ void dm::DMContent::start_darknet()
 				Log("attempting to load ONNX model " + weights_filename);
 				dmapp().onnx_nn.reset(new OnnxHelp::NN(weights_filename, names));
 				
-				// Check if this is a dynamic model and set custom input size if configured
+				// Check if this model has dynamic height/width dimensions and set custom input size if configured
 				if (dmapp().onnx_nn && dmapp().onnx_nn->is_dynamic())
 				{
 					int configured_width = cfg().get_int(cfg_prefix + "onnx_input_width");
@@ -296,7 +296,7 @@ void dm::DMContent::start_darknet()
 					{
 						cv::Size custom_size(configured_width, configured_height);
 						dmapp().onnx_nn->set_input_size(custom_size);
-						Log("Set custom input size for dynamic ONNX model: " + std::to_string(configured_width) + "x" + std::to_string(configured_height));
+						Log("Set custom input size for ONNX model with dynamic height/width: " + std::to_string(configured_width) + "x" + std::to_string(configured_height));
 					}
 				}
 				

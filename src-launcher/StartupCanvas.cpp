@@ -146,7 +146,7 @@ dm::StartupCanvas::StartupCanvas(const std::string & key, const std::string & di
 	properties.add(tmp);
 
 	tmp = new TextPropertyComponent(onnx_input_size							, "ONNX input size"			, 1000, false, true);
-	tmp->setTooltip("Input size for ONNX models. For dynamic models, this can be changed. For static models, this is automatically detected and cannot be modified.");
+	tmp->setTooltip("Input size for ONNX models. For models with dynamic height/width dimensions, this can be changed. For models with static height/width dimensions, this is automatically detected and cannot be modified.");
 	properties.add(tmp);
 	
 	// Store reference to the ONNX input size property for later modification
@@ -824,7 +824,7 @@ void dm::StartupCanvas::selectedRowsChanged(int rowNumber)
 						}
 						else
 						{
-							onnx_input_size_property->setTooltip("Dynamic model - input size can be customized");
+							onnx_input_size_property->setTooltip("Model has dynamic height/width dimensions - input size can be customized");
 						}
 					}
 					

@@ -57,22 +57,26 @@ cv::Size NN::GetModelInputSize(Ort::Session& session, bool& is_dynamic)
 		throw std::runtime_error("ONNX model input shape is not 4D as expected. Got " + std::to_string(input_shape.size()) + " dimensions");
 	}
 
-	// Check if any dimension is dynamic (-1 indicates dynamic dimension)
+	// Check if height and width dimensions are dynamic (-1 indicates dynamic dimension)
+	// Only consider the model dynamic for resolution changes if height (index 2) or width (index 3) are dynamic
+	// Batch size (index 0) being dynamic should not allow resolution changes
 	is_dynamic = false;
-	for (size_t i = 0; i < input_shape.size(); ++i)
+	if (input_shape[2] == -1 || input_shape[3] == -1)
 	{
-		if (input_shape[i] == -1)
-		{
-			is_dynamic = true;
-			break;
-		}
+		is_dynamic = true;
+	}
+	
+	// Log if only batch size is dynamic (for informational purposes)
+	if (!is_dynamic && input_shape[0] == -1)
+	{
+		dm::Log("ONNX model has dynamic batch size only - resolution cannot be customized");
 	}
 
 	if (is_dynamic)
 	{
-		dm::Log("ONNX model has dynamic input dimensions");
+		dm::Log("ONNX model has dynamic height/width dimensions - resolution can be customized");
 		
-		// For dynamic models, we'll use a default size but allow it to be overridden
+		// For models with dynamic height/width dimensions, we'll use a default size but allow it to be overridden
 		// Common default sizes for YOLO models are 640x640, 416x416, or 320x320
 		int default_width = 640;
 		int default_height = 640;
@@ -81,13 +85,13 @@ cv::Size NN::GetModelInputSize(Ort::Session& session, bool& is_dynamic)
 		if (input_shape[2] != -1) default_height = static_cast<int>(input_shape[2]);
 		if (input_shape[3] != -1) default_width = static_cast<int>(input_shape[3]);
 		
-		dm::Log("Using default input size for dynamic model: " + std::to_string(default_width) + "x" + std::to_string(default_height));
+		dm::Log("Using default input size for model with dynamic height/width: " + std::to_string(default_width) + "x" + std::to_string(default_height));
 		return cv::Size(default_width, default_height);
 	}
 	else
 	{
 		// Static dimensions
-		dm::Log("ONNX model has static input dimensions");
+		dm::Log("ONNX model has static height/width dimensions - resolution is fixed");
 		
 		// Validate that we have the expected batch size and channels
 		if (input_shape[0] != 1)
