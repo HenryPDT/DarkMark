@@ -6,7 +6,9 @@
 dm::DMCanvas::DMCanvas(DMContent & c) :
 	CrosshairComponent(c),
 	content(c),
-	is_panning(false)
+	is_panning(false),
+	mark_was_selected_for_merge(false),
+	mark_original_selection_position(-1)
 {
 	setName("ImageCanvas");
 
@@ -165,10 +167,19 @@ void dm::DMCanvas::rebuild_cache_image()
 		}
 
 		const bool is_selected	= (static_cast<int>(idx) == content.selected_mark);
+		const bool is_selected_for_merge = content.multi_bbox_mode and 
+			std::find(content.selected_marks_for_merge.begin(), content.selected_marks_for_merge.end(), static_cast<int>(idx)) != content.selected_marks_for_merge.end();
 		const std::string name	= m.description;
 		const cv::Rect r		= m.get_bounding_rect(content.scaled_image.size());
-		const cv::Scalar colour	= m.get_colour();
-		const int thickness		= (mouse_drag_is_active == false and (is_selected or content.all_marks_are_bold) ? 2 : 1);
+		cv::Scalar colour		= m.get_colour();
+		int thickness			= (mouse_drag_is_active == false and (is_selected or content.all_marks_are_bold) ? 2 : 1);
+		
+		// Highlight selected marks for merge in multi-bbox mode
+		if (is_selected_for_merge)
+		{
+			colour = cv::Scalar(0, 80, 255); // Bright orange color for selected marks (not in class palette)
+			thickness = 3; // Thicker border for selected marks
+		}
 
 		cv::Mat tmp = content.scaled_image(r).clone();
 
@@ -479,6 +490,9 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 
 					// remember the offset between where we clicked, and where the actual corner is located -- this will need to be applied to each mouse event
 					mouse_drag_offset = corner_point - p;
+					
+					// Break out of the loop to prevent selection logic from running
+					break;
 				}
 			}
 
@@ -498,11 +512,42 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 					}
 				}
 			}
+			else
+			{
+				// If we're doing corner dragging, don't change the selected mark
+				// This prevents the highlighting from switching when clicking on corners
+			}
 		}
 	}
 
 	if (index_to_delete >= 0)
 	{
+		// Check if the mark being deleted was selected for merge
+		mark_was_selected_for_merge = false;
+		mark_original_selection_position = -1;
+		if (content.multi_bbox_mode and content.merge_mode_active)
+		{
+			auto it = std::find(content.selected_marks_for_merge.begin(), content.selected_marks_for_merge.end(), index_to_delete);
+			if (it != content.selected_marks_for_merge.end())
+			{
+				mark_was_selected_for_merge = true;
+				// Remember the original position in the selection vector
+				mark_original_selection_position = std::distance(content.selected_marks_for_merge.begin(), it);
+				// Remove the old index from selection
+				content.selected_marks_for_merge.erase(it);
+			}
+			
+			// Update all other selected mark indices that come after the deleted mark
+			// Since we're deleting at index_to_delete, all marks after it shift down by 1
+			for (auto& selected_idx : content.selected_marks_for_merge)
+			{
+				if (selected_idx > index_to_delete)
+				{
+					selected_idx--; // Shift down by 1
+				}
+			}
+		}
+		
 		content.most_recent_class_idx = content.marks[index_to_delete].class_idx;
 		content.marks.erase(content.marks.begin() + index_to_delete);
 		content.selected_mark = -1;
@@ -537,7 +582,15 @@ void dm::DMCanvas::mouseDoubleClick(const MouseEvent & event)
 
 	if (content.merge_mode_active)
 	{
-		content.selectMergeKeyFrame();
+		// Unified merge mode - toggle selection of the clicked mark
+		if (content.selected_mark >= 0 and content.selected_mark < static_cast<int>(content.marks.size()))
+		{
+			content.toggleMarkForMerge(content.selected_mark);
+		}
+		else
+		{
+			content.show_message("No mark selected. Click on a bounding box first.");
+		}
 		return; // Skip normal mark creation.
 	}
 
@@ -647,6 +700,28 @@ void dm::DMCanvas::mouseDragFinished(juce::Rectangle<int> drag_rect, const Mouse
 	content.most_recent_size = m.get_normalized_bounding_rect().size();
 	content.need_to_save = true;
 	content.image_is_completely_empty = false;
+	
+	// If the mark was selected for merge before resize, add the new mark to selection
+	if (mark_was_selected_for_merge and content.multi_bbox_mode and content.merge_mode_active)
+	{
+		// Insert the new mark at the original position to maintain selection order
+		if (mark_original_selection_position >= 0 and mark_original_selection_position < static_cast<int>(content.selected_marks_for_merge.size()))
+		{
+			content.selected_marks_for_merge.insert(
+				content.selected_marks_for_merge.begin() + mark_original_selection_position,
+				content.selected_mark
+			);
+		}
+		else
+		{
+			// Fallback: add to end if position is invalid
+			content.selected_marks_for_merge.push_back(content.selected_mark);
+		}
+		
+		// Reset the flags
+		mark_was_selected_for_merge = false;
+		mark_original_selection_position = -1;
+	}
 
 	bool snap = content.snapping_enabled;
 	if (event.mods.isShiftDown())

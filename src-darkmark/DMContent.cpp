@@ -951,13 +951,27 @@ bool dm::DMContent::keyPressed(const KeyPress & key)
 	{
 		if (not merge_mode_active)
 		{
-			startMergeMode();
+			startMultiBboxMergeMode();
 		}
 		else
 		{
-			merge_mode_active = false;
-			merge_start_marks.clear();
-			show_message("Merge mode cancelled.");
+			cancelMultiBboxMerge();
+		}
+		return true;
+	}
+	else if (key.getKeyCode() == KeyPress::returnKey)
+	{
+		// ENTER key - confirm selection in multi-bbox mode
+		if (multi_bbox_mode and merge_mode_active)
+		{
+			if (not first_frame_selected)
+			{
+				confirmFirstFrameSelection();
+			}
+			else
+			{
+				confirmSecondFrameSelection();
+			}
 		}
 		return true;
 	}
@@ -1424,6 +1438,14 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 	selected_mark	= -1;
 	original_image	= cv::Mat();
 	black_and_white_image = cv::Mat();
+	
+	// Check if we're in multi-bbox merge mode and need to confirm first frame selection
+	// Do this before clearing marks since confirmFirstFrameSelection() needs access to them
+	if (merge_mode_active and multi_bbox_mode and not first_frame_selected and not selected_marks_for_merge.empty())
+	{
+		confirmFirstFrameSelection();
+	}
+	
 	marks.clear();
 	image_is_completely_empty = false;
 
@@ -3105,128 +3127,51 @@ bool dm::DMContent::snap_annotation(int idx)
 }
 
 
-void dm::DMContent::startMergeMode()
-{
-	// Turn on the merge mode and clear any leftover data.
-	merge_mode_active = true;
-	merge_start_marks.clear();
-	show_message("Merge mode activated. Double-click to select the FIRST key frame.");
-
-	return;
-}
 
 
-void dm::DMContent::selectMergeKeyFrame()
-{
-	if (not merge_mode_active)
-	{
-		return; // Do nothing if we're not in merge mode.
-	}
-
-	// Are we picking the FIRST key frame?
-	if (merge_start_marks.empty())
-	{
-		// Make sure the user has actually clicked a valid bounding box:
-		if (selected_mark < 0 or selected_mark >= static_cast<int>(marks.size()))
-		{
-			show_message("No mark selected. Double-click on a bounding box first.");
-			return;
-		}
-
-		// Instead of storing ALL marks, store just the one that was clicked:
-		merge_start_marks.clear();
-		merge_start_marks.push_back(marks[selected_mark]);
-
-		merge_start_index = image_filename_index;
-
-		show_message("First key frame selected. Navigate to the SECOND key frame and double-click to merge.");
-	}
-	else
-	{
-		// This is the SECOND key frame.
-		if (selected_mark < 0 or selected_mark >= static_cast<int>(marks.size()))
-		{
-			show_message("No mark selected in second key frame. Merge cancelled.");
-			merge_mode_active = false;
-			merge_start_marks.clear();
-			return;
-		}
-
-		size_t merge_end_index = image_filename_index;
-
-		// Calculate how many frames are in between.
-		int numIntermediate = 0;
-		if (merge_end_index > merge_start_index)
-		{
-			numIntermediate = static_cast<int>(merge_end_index - merge_start_index - 1);
-		}
-		else if (merge_start_index > merge_end_index)
-		{
-			numIntermediate = static_cast<int>(merge_start_index - merge_end_index - 1);
-		}
-
-		if (numIntermediate < 1)
-		{
-			show_message("No intermediate frames to merge. Merge cancelled.");
-		}
-		else
-		{
-			// Again, store only the single bounding box from the second frame:
-			std::vector<Mark> endMarkVec;
-			endMarkVec.push_back(marks[selected_mark]);
-
-			// Now interpolate from merge_start_marks[0] to endMarkVec[0].
-			interpolateMarks(merge_start_marks, endMarkVec, numIntermediate);
-		}
-
-		// Reset merge mode so we don't accidentally keep merging.
-		merge_mode_active = false;
-		merge_start_marks.clear();
-	}
-}
 
 
-void dm::DMContent::interpolateMarks(const std::vector<Mark> & startMarks, const std::vector<Mark> & endMarks, int /*numIntermediateFrames*/)
+
+
+void dm::DMContent::interpolateMultipleMarks(const std::vector<Mark> & startMarks, const std::vector<Mark> & endMarks, int numIntermediateFrames)
 {
 	// Basic sanity checks.
 	if (startMarks.empty() or endMarks.empty())
 	{
-		Log("Interpolation error: one of the key frames has no marks.");
+		Log("Multi-interpolation error: one of the key frames has no marks.");
 		return;
 	}
 
-	// Because we pushed_back only one Mark in each vector:
-	const Mark & startMark	= startMarks.front();
-	const Mark & endMark	= endMarks	.front();
-
-	if (startMark.class_idx != endMark.class_idx)
+	if (startMarks.size() != endMarks.size())
 	{
-		show_message("Cannot merge objects with different classes.");
+		show_message("Cannot interpolate: number of start marks (" + std::to_string(startMarks.size()) + 
+					") must match end marks (" + std::to_string(endMarks.size()) + ").");
 		return;
 	}
 
-	// Retrieve the normalized bounding rects from the key frames.
-	cv::Rect2d r1 = startMark	.get_normalized_bounding_rect();
-	cv::Rect2d r2 = endMark		.get_normalized_bounding_rect();
-
-	// Save the class info from the start mark (or whichever you prefer).
-	size_t retained_class = startMark.class_idx;
-	std::string retained_name = startMark.name;
-	std::string retained_desc = startMark.description;
+	// Check that all marks have the same class
+	for (size_t i = 0; i < startMarks.size(); ++i)
+	{
+		if (startMarks[i].class_idx != endMarks[i].class_idx)
+		{
+			show_message("Cannot merge objects with different classes at index " + std::to_string(i) + ".");
+			return;
+		}
+	}
 
 	// Determine which way we're interpolating (startIdx < endIdx or vice versa).
-	const size_t startIdx	= merge_start_index;
-	const size_t endIdx		= image_filename_index;
+	const size_t startIdx = merge_start_index;
+	const size_t endIdx = image_filename_index;
 
 	if (startIdx == endIdx or
 		(startIdx + 1 >= endIdx && endIdx >= startIdx) or
 		(endIdx + 1 >= startIdx && startIdx >= endIdx))
 	{
-		Log("No intermediate frames available.");
+		Log("No intermediate frames available for multi-interpolation.");
 		return;
 	}
 
-	// Lambda to process one intermediate frame index:
+	// Lambda to process one intermediate frame index for all mark pairs:
 	auto processFrame = [&](size_t frameIdx, float t)
 	{
 		// Load that frame so we can figure out image dimensions, etc.
@@ -3234,48 +3179,64 @@ void dm::DMContent::interpolateMarks(const std::vector<Mark> & startMarks, const
 
 		cv::Size curSize = original_image.size();
 
-		// Compute center points of r1 & r2.
-		cv::Point2d c1(r1.x + r1.width * 0.5, r1.y + r1.height * 0.5);
-		cv::Point2d c2(r2.x + r2.width * 0.5, r2.y + r2.height * 0.5);
+		// Process each mark pair
+		for (size_t markIdx = 0; markIdx < startMarks.size(); ++markIdx)
+		{
+			const Mark & startMark = startMarks[markIdx];
+			const Mark & endMark = endMarks[markIdx];
 
-		// Linear interpolation for center:
-		cv::Point2d cInterp;
-		cInterp.x = c1.x + t * (c2.x - c1.x);
-		cInterp.y = c1.y + t * (c2.y - c1.y);
+			// Retrieve the normalized bounding rects from the key frames.
+			cv::Rect2d r1 = startMark.get_normalized_bounding_rect();
+			cv::Rect2d r2 = endMark.get_normalized_bounding_rect();
 
-		// Linear interpolation for width & height:
-		double wInterp = r1.width	+ t * (r2.width		- r1.width	);
-		double hInterp = r1.height	+ t * (r2.height	- r1.height	);
+			// Save the class info from the start mark
+			size_t retained_class = startMark.class_idx;
+			std::string retained_name = startMark.name;
+			std::string retained_desc = startMark.description;
 
-		// Build the new normalized rect from center & size.
-		cv::Rect2d rInterpNorm;
-		rInterpNorm.x = cInterp.x - wInterp * 0.5;
-		rInterpNorm.y = cInterp.y - hInterp * 0.5;
-		rInterpNorm.width = wInterp;
-		rInterpNorm.height = hInterp;
+			// Compute center points of r1 & r2.
+			cv::Point2d c1(r1.x + r1.width * 0.5, r1.y + r1.height * 0.5);
+			cv::Point2d c2(r2.x + r2.width * 0.5, r2.y + r2.height * 0.5);
 
-		// Convert normalized -> absolute pixel coords:
-		cv::Rect absRect(
-			static_cast<int>(rInterpNorm.x * curSize.width),
-			static_cast<int>(rInterpNorm.y * curSize.height),
-			static_cast<int>(rInterpNorm.width * curSize.width),
-			static_cast<int>(rInterpNorm.height * curSize.height));
+			// Linear interpolation for center:
+			cv::Point2d cInterp;
+			cInterp.x = c1.x + t * (c2.x - c1.x);
+			cInterp.y = c1.y + t * (c2.y - c1.y);
 
-		// Create a new Mark with the interpolated rect.
-		Mark interp = startMark;
-		interp.image_dimensions = curSize;
-		interp.set(absRect);
+			// Linear interpolation for width & height:
+			double wInterp = r1.width + t * (r2.width - r1.width);
+			double hInterp = r1.height + t * (r2.height - r1.height);
 
-		// Keep the class info from the start mark (or whichever you prefer).
-		interp.class_idx = retained_class;
-		interp.name = retained_name;
-		interp.description = retained_desc;
+			// Build the new normalized rect from center & size.
+			cv::Rect2d rInterpNorm;
+			rInterpNorm.x = cInterp.x - wInterp * 0.5;
+			rInterpNorm.y = cInterp.y - hInterp * 0.5;
+			rInterpNorm.width = wInterp;
+			rInterpNorm.height = hInterp;
 
-		// Insert the new annotation. We do *not* erase other marks in that frame.
-		marks.push_back(interp);
-		need_to_save = true;
+			// Convert normalized -> absolute pixel coords:
+			cv::Rect absRect(
+				static_cast<int>(rInterpNorm.x * curSize.width),
+				static_cast<int>(rInterpNorm.y * curSize.height),
+				static_cast<int>(rInterpNorm.width * curSize.width),
+				static_cast<int>(rInterpNorm.height * curSize.height));
 
-		Log("Frame " + std::to_string(frameIdx) + ": Interpolated annotation created.");
+			// Create a new Mark with the interpolated rect.
+			Mark interp = startMark;
+			interp.image_dimensions = curSize;
+			interp.set(absRect);
+
+			// Keep the class info from the start mark
+			interp.class_idx = retained_class;
+			interp.name = retained_name;
+			interp.description = retained_desc;
+
+			// Insert the new annotation
+			marks.push_back(interp);
+			need_to_save = true;
+		}
+
+		Log("Frame " + std::to_string(frameIdx) + ": " + std::to_string(startMarks.size()) + " interpolated annotations created.");
 	};
 
 	// Walk from startIdx+1 to endIdx-1 (or reverse).
@@ -3297,7 +3258,8 @@ void dm::DMContent::interpolateMarks(const std::vector<Mark> & startMarks, const
 		}
 	}
 
-	show_message("Merge complete. Intermediate annotations interpolated.");
+	show_message("Multi-merge complete. " + std::to_string(startMarks.size()) + " objects interpolated across " + 
+				std::to_string(numIntermediateFrames) + " intermediate frames.");
 
 	// position us back where we started the merge
 	load_image(startIdx, true, true);
@@ -3318,6 +3280,159 @@ cv::Rect2d dm::DMContent::convertToNormalized(const cv::Rect & areaInScreenCoord
 	double h = areaInScreenCoords.height / imgH;
 
 	return cv::Rect2d(x, y, w, h);
+}
+
+
+void dm::DMContent::startMultiBboxMergeMode()
+{
+	// Turn on the multi-bbox merge mode and clear any leftover data.
+	merge_mode_active = true;
+	multi_bbox_mode = true;
+	merge_start_marks.clear();
+	selected_marks_for_merge.clear();
+	first_frame_selected = false;
+	show_message("Multi-bounding box merge mode activated. Double-click on bounding boxes to select them, then press ENTER to confirm first frame.");
+
+	return;
+}
+
+
+void dm::DMContent::toggleMarkForMerge(int mark_index)
+{
+	if (not multi_bbox_mode or not merge_mode_active)
+	{
+		return; // Not in multi-bbox mode
+	}
+
+	if (mark_index < 0 or mark_index >= static_cast<int>(marks.size()))
+	{
+		show_message("Invalid mark index.");
+		return;
+	}
+
+	// Check if this mark is already selected
+	auto it = std::find(selected_marks_for_merge.begin(), selected_marks_for_merge.end(), mark_index);
+	if (it != selected_marks_for_merge.end())
+	{
+		// Remove from selection
+		selected_marks_for_merge.erase(it);
+		show_message("Mark " + std::to_string(mark_index) + " deselected. " + 
+					std::to_string(selected_marks_for_merge.size()) + " marks selected.");
+	}
+	else
+	{
+		// Add to selection
+		selected_marks_for_merge.push_back(mark_index);
+		show_message("Mark " + std::to_string(mark_index) + " selected. " + 
+					std::to_string(selected_marks_for_merge.size()) + " marks selected.");
+	}
+
+	// Update the display to show selected marks
+	rebuild_image_and_repaint();
+}
+
+
+void dm::DMContent::confirmFirstFrameSelection()
+{
+	if (not multi_bbox_mode or not merge_mode_active)
+	{
+		return;
+	}
+
+	if (selected_marks_for_merge.empty())
+	{
+		show_message("No marks selected. Please select at least one bounding box first.");
+		return;
+	}
+
+	// Store the selected marks from the first frame
+	merge_start_marks.clear();
+	for (int mark_idx : selected_marks_for_merge)
+	{
+		merge_start_marks.push_back(marks[mark_idx]);
+	}
+	merge_start_index = image_filename_index;
+	first_frame_selected = true;
+
+	show_message("First frame confirmed with " + std::to_string(selected_marks_for_merge.size()) + 
+				" bounding boxes. Navigate to the second frame and double-click to select corresponding bounding boxes, then press ENTER.");
+
+	// Clear selection for second frame
+	selected_marks_for_merge.clear();
+	rebuild_image_and_repaint();
+}
+
+
+void dm::DMContent::confirmSecondFrameSelection()
+{
+	if (not multi_bbox_mode or not merge_mode_active or not first_frame_selected)
+	{
+		show_message("Please complete first frame selection first.");
+		return;
+	}
+
+	if (selected_marks_for_merge.empty())
+	{
+		show_message("No marks selected in second frame. Please select bounding boxes first.");
+		return;
+	}
+
+	if (selected_marks_for_merge.size() != merge_start_marks.size())
+	{
+		show_message("Number of selected marks in second frame (" + std::to_string(selected_marks_for_merge.size()) + 
+					") must match first frame (" + std::to_string(merge_start_marks.size()) + ").");
+		return;
+	}
+
+	// Create end marks vector
+	std::vector<Mark> end_marks;
+	for (int mark_idx : selected_marks_for_merge)
+	{
+		end_marks.push_back(marks[mark_idx]);
+	}
+
+	size_t merge_end_index = image_filename_index;
+
+	// Calculate how many frames are in between.
+	int numIntermediate = 0;
+	if (merge_end_index > merge_start_index)
+	{
+		numIntermediate = static_cast<int>(merge_end_index - merge_start_index - 1);
+	}
+	else if (merge_start_index > merge_end_index)
+	{
+		numIntermediate = static_cast<int>(merge_start_index - merge_end_index - 1);
+	}
+
+	if (numIntermediate < 1)
+	{
+		show_message("No intermediate frames to merge. Merge cancelled.");
+	}
+	else
+	{
+		// Interpolate all corresponding pairs
+		interpolateMultipleMarks(merge_start_marks, end_marks, numIntermediate);
+	}
+
+	// Reset merge mode
+	merge_mode_active = false;
+	multi_bbox_mode = false;
+	merge_start_marks.clear();
+	selected_marks_for_merge.clear();
+	first_frame_selected = false;
+	rebuild_image_and_repaint();
+}
+
+
+void dm::DMContent::cancelMultiBboxMerge()
+{
+	merge_mode_active = false;
+	multi_bbox_mode = false;
+	merge_start_marks.clear();
+	selected_marks_for_merge.clear();
+	first_frame_selected = false;
+	show_message("Multi-bounding box merge mode cancelled.");
+	rebuild_image_and_repaint();
 }
 
 

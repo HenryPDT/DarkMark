@@ -32,7 +32,13 @@ namespace dm
 			/// Link to the parent which manages the content, including all the marks.
 			DMContent & content;
 
-			/// If the CTRL key is held down while zooming, then we'll pan the image instead of creating a bounding box.
-			bool is_panning;
+		/// If the CTRL key is held down while zooming, then we'll pan the image instead of creating a bounding box.
+		bool is_panning;
+		
+		/// Track if the mark being resized was selected for merge (to restore selection after resize)
+		bool mark_was_selected_for_merge;
+		
+		/// Track the original position of the mark being resized in the selection vector
+		int mark_original_selection_position;
 	};
 }

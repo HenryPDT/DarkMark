@@ -12,7 +12,7 @@ Key							| Saves Modified Marks First	| Description
 @p PAGEDOWN					| yes							| Go to the next image which has not yet been marked.  (Also see @p 'y'.)
 @p HOME						| yes							| Go to the first image.
 @p END						| yes							| Go to the last image.
-@p ENTER (or @p RETURN)		|								| Display the 'class' menu (see @p 'c' key).
+@p ENTER (or @p RETURN)		|								| Display the 'class' menu (see @p 'c' key). In multi-bounding box merge mode, confirms the current frame's bounding box selection.
 @p DEL						|								| Delete the currently selected marking.
 @p BACKSPACE				|								| Same as @p DEL.
 @p SHIFT + @p DEL			| no							| Delete the current image from disk.  Moves the image to the trash, removing it from the data set.  Be careful, this @em does @em not prompt!
@@ -26,7 +26,7 @@ Key							| Saves Modified Marks First	| Description
 @p CTRL + @p c (or @p CTRL + @p INSERT)		|				| Copy the current selected annotation (or all annotations if none are selected) to the clipboard.
 @p CTRL + @p v (or @p SHIFT + @p INSERT)	|				| Paste the annotations from the clipboard into the current image.
 @p SPACE					|								| Toggle between automatic zoom and manual zoom (see @p '-', @p '+', @p 'ESC' keys, and @p CTRL below).
-@p ` (backtick)				| yes							| Toggle merge mode. Take two marks across a gap of frames and interpolate the marks in between them by both location and size.
+@p ` (backtick)				| yes							| Toggle merge mode. Select one or more bounding boxes in the first frame, then corresponding boxes in the second frame, and interpolate all pairs across intermediate frames.
 @p a (lowercase)			|								| Accept all Darknet predictions (if any) for the current image as actual markings.
 @p A (uppercase)			|								| Accept only the currently-selected prediction and discard all other predictions.  If none are selected, then this behaves like @p 'a' where all predictions are accepted.
 @p b (lowercase)			|								| Toggle @em bold mode.  All markings will be displayed in "bold", making it easier to review.
@@ -62,6 +62,13 @@ Key							| Saves Modified Marks First	| Description
 In addition to these keyboard shortcuts, note the following mouse behaviour:
 
 @li When you click on an existing mark, the application remembers both the class and the size of the selected mark.  If you then double-click on an image, DarkMark assumes you want to create a new mark of the same size, and with the same class.  The new mark is positioned so the mouse click is at the center.  This can be useful if images have a large number of repeating objects.
+
+@li In merge mode (activated with @p `), you can select one or more bounding boxes for interpolation:
+  - Click on bounding boxes to select them (they will be highlighted in purple)
+  - Press @p ENTER to confirm the first frame's selection, or simply navigate to another image
+  - Navigate to the second frame and select corresponding bounding boxes in the same order
+  - Press @p ENTER again to start the interpolation process
+  - All selected bounding box pairs will be interpolated across the intermediate frames
 
 @li While creating a new mark or resizing an existing mark, you can hold down @p SHIFT to alter the snap behaviour.  If snap is disabled, then holding down @p SHIFT when you let go of the mouse button will temporarily enable snapping.  If snap is enabled, then holding down @p SHIFT when you let go of the mouse button will temporarily disable snapping.  (Snapping is usually toggled with @p d and @p D.)
 

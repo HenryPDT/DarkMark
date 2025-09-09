@@ -310,10 +310,20 @@ namespace dm
 			bool mass_delete_mode_active = false;
 			std::vector<Mark> merge_start_marks; ///< Holds marks from the first key frame.
 			size_t merge_start_index; ///< Holds the index of the first key frame.
+			
+			// multi-bounding box support for merge mode
+			bool multi_bbox_mode = false; ///< Whether we're in multi-bounding box selection mode
+			std::vector<int> selected_marks_for_merge; ///< Indices of currently selected marks for merge
+			bool first_frame_selected = false; ///< Whether the first frame's bounding boxes have been selected
 
-			void startMergeMode();
-			void selectMergeKeyFrame(); ///< Called on mouse click in merge mode.
-			void interpolateMarks(const std::vector<Mark> & startMarks, const std::vector<Mark> & endMarks, int numIntermediateFrames);
+			void interpolateMultipleMarks(const std::vector<Mark> & startMarks, const std::vector<Mark> & endMarks, int numIntermediateFrames);
+			
+			// Multi-bounding box support methods
+			void startMultiBboxMergeMode();
+			void toggleMarkForMerge(int mark_index);
+			void confirmFirstFrameSelection();
+			void confirmSecondFrameSelection();
+			void cancelMultiBboxMerge();
 			cv::Rect2d convertToNormalized(const cv::Rect & areaInScreenCoords);
 
 			int showClassSelectionMenu();
