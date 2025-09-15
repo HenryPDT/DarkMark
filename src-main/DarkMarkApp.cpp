@@ -312,6 +312,7 @@ void dm::DarkMarkApplication::initialise(const String & commandLine)
 	try
 	{
 		cfg.reset(new Cfg);
+		keybind_manager.reset(new KeybindManager);
 	}
 	catch (const std::exception & e)
 	{

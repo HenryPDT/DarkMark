@@ -460,720 +460,14 @@ void dm::DMContent::rebuild_image_and_repaint()
 
 bool dm::DMContent::keyPressed(const KeyPress & key)
 {
-//	Log("code=" + std::to_string(key.getKeyCode()) + " char=" + std::to_string(key.getTextCharacter()) + " description=" + key.getTextDescription().toStdString());
-
-	const auto keycode = key.getKeyCode();
-	const auto keychar = key.getTextCharacter();
-//	show_message(key.getTextDescription().toStdString());
-
-	const KeyPress key0			= KeyPress::createFromDescription("0");
-	const KeyPress key9			= KeyPress::createFromDescription("9");
-	const KeyPress ctrl_c		= KeyPress::createFromDescription("ctrl + c"); // copy
-	const KeyPress ctrl_v		= KeyPress::createFromDescription("ctrl + v"); // paste
-	const KeyPress ctrl_insert	= KeyPress::createFromDescription("ctrl + insert");
-	const KeyPress shift_insert	= KeyPress::createFromDescription("shift + insert");
-
-	int digit = -1;
-	if (keycode >= key0.getKeyCode() and keycode <= key9.getKeyCode())
+	const KeybindAction action = dmapp().keybind_manager->getActionForKey(key);
+	if (action != KeybindAction::Unknown)
 	{
-		digit = keycode - key0.getKeyCode();
+		return handleKeybindAction(action);
 	}
 
-	if (keycode == KeyPress::tabKey)
-	{
-		if (marks.empty())
-		{
-			selected_mark = -1;
-		}
-		else
-		{
-			int attempt = 10;
-			while (attempt >= 0)
-			{
-				if (key.getModifiers().isShiftDown())
-				{
-					// select previous mark
-					selected_mark --;
-					if (selected_mark < 0 or selected_mark >= (int)marks.size())
-					{
-						// wrap back around to the last mark
-						selected_mark = marks.size() - 1;
-					}
-				}
-				else
-				{
-					// select next mark
-					selected_mark ++;
-					if (selected_mark < 0 or selected_mark >= (int)marks.size())
-					{
-						// wrap back around to the very first mark
-						selected_mark = 0;
-					}
-				}
-
-				const auto & m = marks.at(selected_mark);
-				if ((marks_are_shown and m.is_prediction == false) or
-					(predictions_are_shown and m.is_prediction))
-				{
-					// we found one that works!  keep it!
-					break;
-				}
-
-				// try again to find a mark that is shown on the screen
-				attempt --;
-			}
-			if (attempt < 0)
-			{
-				selected_mark = -1;
-			}
-		}
-
-		if (selected_mark >= 0)
-		{
-			// remember the class and size of this mark in case the user wants to double-click and create a similar one
-			const Mark & m = marks.at(selected_mark);
-			most_recent_class_idx = m.class_idx;
-			most_recent_size = m.get_normalized_bounding_rect().size();
-
-			const auto & opencv_colour = annotation_colours.at(most_recent_class_idx % annotation_colours.size());
-			crosshair_colour = Colour(opencv_colour[2], opencv_colour[1], opencv_colour[0]);
-		}
-
-		rebuild_image_and_repaint();
-		return true; // event has been handled
-	}
-	else if (digit >= 0 and digit <= 9)
-	{
-		if (key.getModifiers().isCtrlDown())
-		{
-			digit += 10;
-		}
-		if (key.getModifiers().isAltDown())
-		{
-			digit += 20;
-		}
-
-		// change the class for the selected mark
-		set_class(digit);
-		return true; // event has been handled
-	}
-	else if (keycode == KeyPress::homeKey)
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-		load_image(0);
-		return true;
-	}
-	else if (keycode == KeyPress::endKey)
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-		load_image(image_filenames.size() - 1);
-		return true;
-	}
-	else if (keycode == KeyPress::rightKey)
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-//			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-		if (image_filename_index < image_filenames.size() - 1)
-		{
-			load_image(image_filename_index + 1);
-		}
-		return true;
-	}
-	else if (keycode == KeyPress::leftKey)
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-//			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-		if (image_filename_index > 0)
-		{
-			load_image(image_filename_index - 1);
-		}
-		return true;
-	}
-	else if (keycode == KeyPress::pageUpKey)
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-//			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-
-		// go to the previous available image with no marks
-		auto idx = image_filename_index;
-		while (idx > 0)
-		{
-			idx --;
-
-			File f(image_filenames[idx]);
-			f = f.withFileExtension(".json");
-			if (count_marks_in_json(f) == 0)
-			{
-				break;
-			}
-		}
-		load_image(idx);
-		return true;
-
-	}
-	else if (keycode == KeyPress::pageDownKey)
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-//			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-
-		// go to the next available image with no marks
-		auto idx = image_filename_index;
-		while (idx < image_filenames.size() - 1)
-		{
-			idx ++;
-
-			File f(image_filenames[idx]);
-			f = f.withFileExtension(".json");
-			if (count_marks_in_json(f) == 0)
-			{
-				break;
-			}
-		}
-		load_image(idx);
-		return true;
-	}
-	else if (keycode == KeyPress::upKey or keycode == KeyPress::downKey)
-	{
-		if (dmapp().darkhelp_nn)
-		{
-			float threshold = dmapp().darkhelp_nn->config.threshold;
-
-			threshold += (keycode == KeyPress::upKey ? 0.05f : -0.05f);
-			threshold = std::min(std::max(threshold, 0.05f), 0.95f);
-
-			if (threshold != dmapp().darkhelp_nn->config.threshold)
-			{
-				dmapp().darkhelp_nn->config.threshold = threshold;
-				load_image(image_filename_index);
-				show_message("darknet threshold: " + std::to_string((int)std::round(100.0 * threshold)) + "%");
-			}
-		}
-		else if (dmapp().onnx_nn)
-		{
-			int threshold = cfg().get_int("onnx_threshold");
-
-			threshold += (keycode == KeyPress::upKey ? 5 : -5);
-			threshold = std::min(std::max(threshold, 5), 95);
-
-			if (threshold != cfg().get_int("onnx_threshold"))
-			{
-				cfg().setValue("onnx_threshold", threshold);
-				load_image(image_filename_index);
-				show_message("ONNX threshold: " + std::to_string(threshold) + "%");
-			}
-		}
-		return true;
-	}
-	else if (keycode == KeyPress::deleteKey and key.getModifiers().isShiftDown())
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-		delete_current_image();
-		return true;
-	}
-	else if (keycode == KeyPress::deleteKey or keycode == KeyPress::backspaceKey or keycode == KeyPress::numberPadDelete)
-	{
-		if (selected_mark >= 0)
-		{
-			auto iter = marks.begin() + selected_mark;
-			marks.erase(iter);
-			selected_mark = -1;
-			need_to_save = true;
-			rebuild_image_and_repaint();
-			return true;
-		}
-	}
-	else if (keycode == KeyPress::escapeKey)
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// get out of zoom mode instead of quitting from the application
-			return keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-		else if (merge_mode_active)
-		{
-			show_message("Merge mode cancelled.");
-			merge_mode_active = false;
-			merge_start_marks.clear();
-			return true;
-		}
-		else if (mass_delete_mode_active)
-		{
-			show_message("Mass-delete mode cancelled.");
-			mass_delete_mode_active = false;
-			return true;
-		}
-
-		dmapp().wnd->closeButtonPressed();
-		return true;
-	}
-	else if (keycode == KeyPress::F1Key)
-	{
-		if (not dmapp().about_wnd)
-		{
-			dmapp().about_wnd.reset(new AboutWnd);
-		}
-		dmapp().about_wnd->toFront(true);
-		return true;
-	}
-	else if (key == ctrl_c or key == ctrl_insert)
-	{
-		json root;
-		root["annotations"] = json::array();
-		size_t counter = 0;
-
-		// copy all of the bounding boxes into a JSON structure in the clipboard
-
-		for (size_t idx = 0; idx < marks.size(); idx ++)
-		{
-			const auto & m = marks[idx];
-			if (m.is_prediction)
-			{
-				continue;
-			}
-
-			if (selected_mark < 0 or selected_mark == static_cast<int>(idx))
-			{
-				const cv::Rect2d r = m.get_normalized_bounding_rect();
-				auto & j = root["annotations"][counter ++];
-				j["x"]			= r.x + r.width		/ 2.0;
-				j["y"]			= r.y + r.height	/ 2.0;
-				j["w"]			= r.width;
-				j["h"]			= r.height;
-				j["class_idx"]	= m.class_idx;
-				j["name"]		= m.name;
-			}
-		}
-
-		root["source"]["filename"]	= image_filenames[image_filename_index];
-
-		root["meta"]["timestamp"]	= std::time(nullptr);
-		root["meta"]["version"]		= DARKMARK_VERSION;
-
-		SystemClipboard::copyTextToClipboard(root.dump(1, '\t'));
-
-		show_message("copied " + std::to_string(counter) + " bounding box" + (counter == 1 ? "" : "es"));
-
-		return true;
-	}
-	else if (key == ctrl_v or key == shift_insert)
-	{
-		const auto str = SystemClipboard::getTextFromClipboard().toStdString();
-		Log("paste clipboard contents:\n" + str);
-		size_t counter = 0;
-		if (str.size() > 0 and str[0] == '{')
-		{
-			try
-			{
-				json root = json::parse(str);
-				for (const auto & j : root["annotations"])
-				{
-					Log(std::to_string(counter) + ": " + j.dump());
-					const size_t class_idx				= j["class_idx"];
-					const cv::Point2d midpoint			= {j["x"], j["y"]};
-					const cv::Size2d normalized_size	= {j["w"], j["h"]};
-					const cv::Size image_size			= original_image.size();
-
-					Mark m(midpoint, normalized_size, image_size, class_idx);
-					m.name			= names.at(class_idx);
-					m.description	= m.name;
-					m.is_prediction	= false;
-					need_to_save	= true;
-					marks.push_back(m);
-					counter ++;
-				}
-			}
-			catch (const std::exception & e)
-			{
-				Log(std::string("invalid json in clipboard?\n") + e.what());
-			}
-		}
-
-		if (counter > 0)
-		{
-			rebuild_image_and_repaint();
-		}
-
-		show_message("pasted " + std::to_string(counter) + " bounding box" + (counter == 1 ? "" : "es"));
-
-		return true;
-	}
-	else if (keychar == '-') // why is the value for KeyPress::numberPadSubtract unusable!?
-	{
-		double zoom = user_specified_zoom_factor > 0.0 ? user_specified_zoom_factor : current_zoom_factor;
-		zoom -= 0.1;
-		setZoom(zoom, zoom_point_of_interest);
-		return true;
-	}
-	else if (keychar == '+') // why is the value for KeyPress::numberPadAdd unusable!?
-	{
-		const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
-		cv::Point zoom_point = cv::Point(
-			std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor),
-			std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor)
-		);
-		double zoom = user_specified_zoom_factor > 0.0 ? user_specified_zoom_factor : current_zoom_factor;
-		if (key.getModifiers().isShiftDown()) // with SHIFT we immediately skip to 500%
-		{
-			zoom = 5.0;
-		}
-		else
-		{
-			zoom = std::round(current_zoom_factor * 10.0 + 1.0) / 10.0;
-			if (zoom > 5.0)
-			{
-				zoom = 5.0;
-			}
-		}
-		setZoom(zoom, zoom_point);
-		return true;
-	}
-	else if (keycode == KeyPress::spaceKey)
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// go back to "auto" zoom
-			zoom_point_of_interest = cv::Size(0, 0);
-			previous_zoom_factor = user_specified_zoom_factor;
-			user_specified_zoom_factor = -1.0;
-			show_message("zoom: auto");
-		}
-		else
-		{
-			// restore the previous zoom factor around the current mouse position
-
-			const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
-			Log("zoom point of interest was: x=" + std::to_string(point.x) + " y=" + std::to_string(point.y));
-			zoom_point_of_interest.x = std::max(0, point.x) / current_zoom_factor;
-			zoom_point_of_interest.y = std::max(0, point.y) / current_zoom_factor;
-			Log("zoom point of interest now: x=" + std::to_string(zoom_point_of_interest.x) + " y=" + std::to_string(zoom_point_of_interest.y));
-			user_specified_zoom_factor = previous_zoom_factor;
-			show_message("zoom: " + std::to_string(static_cast<int>(user_specified_zoom_factor * 100.0)) + "%");
-		}
-
-		resized();
-		rebuild_image_and_repaint();
-		return true;
-	}
-	else if (keychar == 'r')
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-		set_sort_order(ESort::kRandom);
-		show_message("re-shuffle random sort");
-		return true;
-	}
-	else if (keychar == 'R')
-	{
-		if (user_specified_zoom_factor > 0.0)
-		{
-			// jump out of "zoom" mode before we do anything else
-			keyPressed(KeyPress::createFromDescription("spacebar"));
-		}
-		set_sort_order(ESort::kAlphabetical);
-		show_message("alphabetical sort");
-		return true;
-	}
-	else if (keychar == 'a')
-	{
-		accept_all_marks();
-		return true; // event has been handled
-	}
-	else if (keychar == 'A')
-	{
-		accept_current_mark();
-		return true; // event has been handled
-	}
-	else if (keychar == 'p')
-	{
-		EToggle toggle = static_cast<EToggle>( (int(show_predictions) + 1) % 3 );
-
-		if (toggle == EToggle::kOn)
-		{
-			// skip "on" and go directly to "auto"
-			toggle = EToggle::kAuto;
-		}
-
-		toggle_show_predictions(toggle);
-		show_message("predictions: " + std::string(
-				toggle == EToggle::kOn	? "on"	:
-				toggle == EToggle::kOff	? "off"	: "auto"));
-
-		return true;
-	}
-	else if (keychar == 'm')
-	{
-		toggle_show_marks();
-		show_message("user marks: " + std::string(show_marks ? "visible" : "hidden"));
-		return true;
-	}
-	else if (keychar == 'o')
-	{
-		// If mass-delete mode is off, turn it on. Otherwise, turn it off.
-		if (not mass_delete_mode_active)
-		{
-			mass_delete_mode_active = true;
-			show_message("Mass-delete mode activated. Click and drag to select an area.");
-		}
-		else
-		{
-			mass_delete_mode_active = false;
-			show_message("Mass-delete mode deactivated.");
-		}
-	}
-	else if (key.getTextCharacter() == '`')
-	{
-		if (not merge_mode_active)
-		{
-			startMultiBboxMergeMode();
-		}
-		else
-		{
-			cancelMultiBboxMerge();
-		}
-		return true;
-	}
-	else if (key.getKeyCode() == KeyPress::returnKey)
-	{
-		// ENTER key - confirm selection in multi-bbox mode
-		if (multi_bbox_mode and merge_mode_active)
-		{
-			if (not first_frame_selected)
-			{
-				confirmFirstFrameSelection();
-			}
-			else
-			{
-				confirmSecondFrameSelection();
-			}
-		}
-		return true;
-	}
-	else if (keychar == 'l')
-	{
-		EToggle toggle = static_cast<EToggle>( (int(show_labels) + 1) % 3 );
-		set_labels(toggle);
-		show_message("labels: " + std::string(
-				toggle == EToggle::kOn	? "on"	:
-				toggle == EToggle::kOff	? "off"	: "auto"));
-		return true;
-	}
-	else if (keychar == 'b')
-	{
-		toggle_bold_labels();
-		show_message("bold: " + std::string(all_marks_are_bold ? "enable" : "disable"));
-		return true;
-	}
-	else if (keychar == 'B')
-	{
-		toggle_shade_rectangles();
-		show_message("shade: " + std::string(shade_rectangles ? "enable" : "disable"));
-		return true;
-	}
-	else if (keychar == 'C')
-	{
-		erase_all_marks();
-		return true;
-	}
-	else if (keychar == 'c' or keycode == KeyPress::returnKey)
-	{
-		create_class_menu().showMenuAsync(PopupMenu::Options());
-		return true;
-	}
-	else if (keychar == 'd')
-	{
-		if (selected_mark < 0)
-		{
-			size_t count = 0;
-			size_t skipped = 0;
-			for (size_t idx = 0; idx < marks.size(); idx ++)
-			{
-				if (marks[idx].is_prediction == false)
-				{
-					const auto adjusted = snap_annotation(idx);
-					if (adjusted)
-					{
-						count ++;
-					}
-					else
-					{
-						skipped ++;
-					}
-				}
-			}
-
-			const auto total = count + skipped;
-			if (total == 0)
-			{
-				show_message("no annotations to snap");
-			}
-			else
-			{
-				show_message("snapped " + std::to_string(count) + " annotation" + (count == 1 ? "" : "s"));
-			}
-		}
-		else
-		{
-			const auto adjusted = snap_annotation(selected_mark);
-			if (adjusted)
-			{
-				show_message("snapped selected annotation");
-			}
-			else
-			{
-				show_message("selected annotation was not snapped");
-			}
-		}
-		return true;
-	}
-	else if (keychar == 'D')
-	{
-		snapping_enabled = not snapping_enabled;
-		show_message("snapping: " + std::string(snapping_enabled ? "enable" : "disable"));
-		cfg().setValue("snapping_enabled", snapping_enabled);
-		return true;
-	}
-	else if (keychar == 'h')
-	{
-		if (heatmap_enabled)
-		{
-			cycle_heatmaps();
-		}
-		else
-		{
-			toggle_heatmaps();
-		}
-		return true;
-	}
-	else if (keychar == 'H')
-	{
-		toggle_heatmaps();
-		return true;
-	}
-	else if (keychar == 'j')
-	{
-		show_jump_wnd();
-		return true;
-	}
-	else if (keychar == 'n')
-	{
-		if (number_of_marks == 0)
-		{
-			if (user_specified_zoom_factor > 0.0)
-			{
-				// jump out of "zoom" mode before we do anything else
-				keyPressed(KeyPress::createFromDescription("spacebar"));
-			}
-			image_is_completely_empty = true;
-			need_to_save = true;
-
-			if (cfg().get_bool("move_to_next_image_after_n"))
-			{
-				// pretend as if PAGEDOWN was pressed so we move to the next image
-				return keyPressed(KeyPress::createFromDescription("page down"));
-			}
-			// reload the image so we can see the result of marking it as a negative sample
-			load_image(image_filename_index);
-			return true;
-		}
-
-		show_message("delete annotations before marking the image as empty");
-		return true;
-	}
-	else if (keychar == 's')
-	{
-		save_screenshot(false);
-		return true;
-	}
-	else if (keychar == 'S')
-	{
-		save_screenshot(true);
-		return true;
-	}
-	else if (keychar == 't')
-	{
-		if (dmapp().darkhelp_nn)
-		{
-			dmapp().darkhelp_nn->config.enable_tiles = ! dmapp().darkhelp_nn->config.enable_tiles;
-			show_message("image tiling: " + std::string(dmapp().darkhelp_nn->config.enable_tiles ? "enable" : "disable"));
-			load_image(image_filename_index);
-			cfg().setValue("darknet_image_tiling", dmapp().darkhelp_nn->config.enable_tiles);
-		}
-		return true;
-	}
-	else if (keychar == 'w')
-	{
-		toggle_black_and_white_mode();
-		return true;
-	}
-	else if (keychar == 'y')
-	{
-		copy_marks_from_previous_image();
-		return true;
-	}
-	else if (keychar == 'Y')
-	{
-		copy_marks_from_next_image();
-		return true;
-	}
-	else if (keychar == 'e')
-	{
-		if (not dmapp().settings_wnd)
-		{
-			dmapp().settings_wnd.reset(new SettingsWnd(*this));
-		}
-		dmapp().settings_wnd->toFront(true);
-	}
-	else if (keychar == 'f')
-	{
-		if (need_to_save)
-		{
-			save_json();
-			save_text();
-		}
-
-		if (not dmapp().filter_wnd)
-		{
-			dmapp().filter_wnd.reset(new FilterWnd(*this));
-		}
-		dmapp().filter_wnd->toFront(true);
-	}
-	else if (keychar == 'z')
-	{
-		zoom_and_review();
-		return true;
-	}
-	else
-	{
-		show_message("ignoring unknown key '" + key.getTextDescription().toStdString() + "'");
-	}
-
+	// if we get here, then the key is not bound to any action
+	show_message("Unknown key '" + key.getTextDescription().toStdString() + "'");
 	return false;
 }
 
@@ -2541,6 +1835,14 @@ PopupMenu dm::DMContent::create_popup_menu()
 		}
 		dmapp().filter_wnd->toFront(true);
 	}));
+	m.addItem("keybind editor...", std::function<void()>( [&]
+	{
+		if (not dmapp().keybind_editor_wnd)
+		{
+			dmapp().keybind_editor_wnd.reset(new KeybindEditorWnd);
+		}
+		dmapp().keybind_editor_wnd->toFront(true);
+	}));
 
 	return m;
 }
@@ -3669,4 +2971,752 @@ void dm::DMContent::setZoom(double new_zoom_factor, cv::Point zoom_point)
     resized();
     rebuild_image_and_repaint();
     show_message("zoom: " + std::to_string(static_cast<int>(user_specified_zoom_factor * 100.0)) + "%");
+}
+
+
+bool dm::DMContent::handleKeybindAction(KeybindAction action)
+{
+	switch (action)
+	{
+		// Navigation
+		case KeybindAction::NavigateLeft:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				// jump out of "zoom" mode before we do anything else
+				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			if (image_filename_index > 0)
+			{
+				load_image(image_filename_index - 1);
+			}
+			return true;
+			
+		case KeybindAction::NavigateRight:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				// jump out of "zoom" mode before we do anything else
+				// handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			if (image_filename_index < image_filenames.size() - 1)
+			{
+				load_image(image_filename_index + 1);
+			}
+			return true;
+			
+		case KeybindAction::NavigateUp:
+			if (dmapp().darkhelp_nn)
+			{
+				float threshold = dmapp().darkhelp_nn->config.threshold;
+				threshold += 0.05f;
+				threshold = std::min(std::max(threshold, 0.05f), 0.95f);
+				if (threshold != dmapp().darkhelp_nn->config.threshold)
+				{
+					dmapp().darkhelp_nn->config.threshold = threshold;
+					load_image(image_filename_index);
+					show_message("darknet threshold: " + std::to_string((int)std::round(100.0 * threshold)) + "%");
+				}
+			}
+			else if (dmapp().onnx_nn)
+			{
+				int threshold = cfg().get_int("onnx_threshold");
+				threshold += 5;
+				threshold = std::min(std::max(threshold, 5), 95);
+				if (threshold != cfg().get_int("onnx_threshold"))
+				{
+					cfg().setValue("onnx_threshold", threshold);
+					load_image(image_filename_index);
+					show_message("ONNX threshold: " + std::to_string(threshold) + "%");
+				}
+			}
+			return true;
+			
+		case KeybindAction::NavigateDown:
+			if (dmapp().darkhelp_nn)
+			{
+				float threshold = dmapp().darkhelp_nn->config.threshold;
+				threshold -= 0.05f;
+				threshold = std::min(std::max(threshold, 0.05f), 0.95f);
+				if (threshold != dmapp().darkhelp_nn->config.threshold)
+				{
+					dmapp().darkhelp_nn->config.threshold = threshold;
+					load_image(image_filename_index);
+					show_message("darknet threshold: " + std::to_string((int)std::round(100.0 * threshold)) + "%");
+				}
+			}
+			else if (dmapp().onnx_nn)
+			{
+				int threshold = cfg().get_int("onnx_threshold");
+				threshold -= 5;
+				threshold = std::min(std::max(threshold, 5), 95);
+				if (threshold != cfg().get_int("onnx_threshold"))
+				{
+					cfg().setValue("onnx_threshold", threshold);
+					load_image(image_filename_index);
+					show_message("ONNX threshold: " + std::to_string(threshold) + "%");
+				}
+			}
+			return true;
+			
+		case KeybindAction::NavigatePageUp:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			// go to the previous available image with no marks
+			{
+				auto idx = image_filename_index;
+				while (idx > 0)
+				{
+					idx --;
+					File f(image_filenames[idx]);
+					f = f.withFileExtension(".json");
+					if (count_marks_in_json(f) == 0)
+					{
+						break;
+					}
+				}
+				load_image(idx);
+			}
+			return true;
+			
+		case KeybindAction::NavigatePageDown:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			// go to the next available image with no marks
+			{
+				auto idx = image_filename_index;
+				while (idx < image_filenames.size() - 1)
+				{
+					idx ++;
+					File f(image_filenames[idx]);
+					f = f.withFileExtension(".json");
+					if (count_marks_in_json(f) == 0)
+					{
+						break;
+					}
+				}
+				load_image(idx);
+			}
+			return true;
+			
+		case KeybindAction::NavigateHome:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			load_image(0);
+			return true;
+			
+		case KeybindAction::NavigateEnd:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			load_image(image_filenames.size() - 1);
+			return true;
+			
+		case KeybindAction::NavigateNextMark:
+			if (marks.empty())
+			{
+				selected_mark = -1;
+			}
+			else
+			{
+				int attempt = 10;
+				while (attempt >= 0)
+				{
+					// select next mark
+					selected_mark ++;
+					if (selected_mark < 0 or selected_mark >= (int)marks.size())
+					{
+						// wrap back around to the very first mark
+						selected_mark = 0;
+					}
+
+					const auto & m = marks.at(selected_mark);
+					if ((marks_are_shown and m.is_prediction == false) or
+						(predictions_are_shown and m.is_prediction))
+					{
+						// we found one that works!  keep it!
+						break;
+					}
+
+					// try again to find a mark that is shown on the screen
+					attempt --;
+				}
+				if (attempt < 0)
+				{
+					selected_mark = -1;
+				}
+			}
+
+			if (selected_mark >= 0)
+			{
+				// remember the class and size of this mark in case the user wants to double-click and create a similar one
+				const Mark & m = marks.at(selected_mark);
+				most_recent_class_idx = m.class_idx;
+				most_recent_size = m.get_normalized_bounding_rect().size();
+
+				const auto & opencv_colour = annotation_colours.at(most_recent_class_idx % annotation_colours.size());
+				crosshair_colour = Colour(opencv_colour[2], opencv_colour[1], opencv_colour[0]);
+			}
+
+			rebuild_image_and_repaint();
+			return true;
+			
+		case KeybindAction::NavigatePreviousMark:
+			if (marks.empty())
+			{
+				selected_mark = -1;
+			}
+			else
+			{
+				int attempt = 10;
+				while (attempt >= 0)
+				{
+					// select previous mark
+					selected_mark --;
+					if (selected_mark < 0 or selected_mark >= (int)marks.size())
+					{
+						// wrap back around to the last mark
+						selected_mark = marks.size() - 1;
+					}
+
+					const auto & m = marks.at(selected_mark);
+					if ((marks_are_shown and m.is_prediction == false) or
+						(predictions_are_shown and m.is_prediction))
+					{
+						// we found one that works!  keep it!
+						break;
+					}
+
+					// try again to find a mark that is shown on the screen
+					attempt --;
+				}
+				if (attempt < 0)
+				{
+					selected_mark = -1;
+				}
+			}
+
+			if (selected_mark >= 0)
+			{
+				// remember the class and size of this mark in case the user wants to double-click and create a similar one
+				const Mark & m = marks.at(selected_mark);
+				most_recent_class_idx = m.class_idx;
+				most_recent_size = m.get_normalized_bounding_rect().size();
+
+				const auto & opencv_colour = annotation_colours.at(most_recent_class_idx % annotation_colours.size());
+				crosshair_colour = Colour(opencv_colour[2], opencv_colour[1], opencv_colour[0]);
+			}
+
+			rebuild_image_and_repaint();
+			return true;
+			
+		// Image operations
+		case KeybindAction::AcceptAllMarks:
+			accept_all_marks();
+			return true;
+			
+		case KeybindAction::AcceptCurrentMark:
+			accept_current_mark();
+			return true;
+			
+		case KeybindAction::EraseAllMarks:
+			erase_all_marks();
+			return true;
+			
+		case KeybindAction::DeleteCurrentImage:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			delete_current_image();
+			return true;
+			
+		case KeybindAction::DeleteSelectedMark:
+			if (selected_mark >= 0)
+			{
+				auto iter = marks.begin() + selected_mark;
+				marks.erase(iter);
+				selected_mark = -1;
+				need_to_save = true;
+				rebuild_image_and_repaint();
+			}
+			return true;
+			
+		case KeybindAction::CopyAnnotations:
+			{
+				json root;
+				root["annotations"] = json::array();
+				size_t counter = 0;
+
+				// copy all of the bounding boxes into a JSON structure in the clipboard
+				for (size_t idx = 0; idx < marks.size(); idx ++)
+				{
+					const auto & m = marks[idx];
+					if (m.is_prediction)
+					{
+						continue;
+					}
+
+					if (selected_mark < 0 or selected_mark == static_cast<int>(idx))
+					{
+						const cv::Rect2d r = m.get_normalized_bounding_rect();
+						auto & j = root["annotations"][counter ++];
+						j["x"]			= r.x + r.width		/ 2.0;
+						j["y"]			= r.y + r.height	/ 2.0;
+						j["w"]			= r.width;
+						j["h"]			= r.height;
+						j["class_idx"]	= m.class_idx;
+						j["name"]		= m.name;
+					}
+				}
+
+				root["source"]["filename"]	= image_filenames[image_filename_index];
+				root["meta"]["timestamp"]	= std::time(nullptr);
+				root["meta"]["version"]		= DARKMARK_VERSION;
+
+				SystemClipboard::copyTextToClipboard(root.dump(1, '\t'));
+				show_message("copied " + std::to_string(counter) + " bounding box" + (counter == 1 ? "" : "es"));
+			}
+			return true;
+			
+		case KeybindAction::PasteAnnotations:
+			{
+				const auto str = SystemClipboard::getTextFromClipboard().toStdString();
+				Log("paste clipboard contents:\n" + str);
+				size_t counter = 0;
+				if (str.size() > 0 and str[0] == '{')
+				{
+					try
+					{
+						json root = json::parse(str);
+						for (const auto & j : root["annotations"])
+						{
+							Log(std::to_string(counter) + ": " + j.dump());
+							const size_t class_idx				= j["class_idx"];
+							const cv::Point2d midpoint			= {j["x"], j["y"]};
+							const cv::Size2d normalized_size	= {j["w"], j["h"]};
+							const cv::Size image_size			= original_image.size();
+
+							Mark m(midpoint, normalized_size, image_size, class_idx);
+							m.name			= names.at(class_idx);
+							m.description	= m.name;
+							m.is_prediction	= false;
+							need_to_save	= true;
+							marks.push_back(m);
+							counter ++;
+						}
+					}
+					catch (const std::exception & e)
+					{
+						Log(std::string("invalid json in clipboard?\n") + e.what());
+					}
+				}
+
+				if (counter > 0)
+				{
+					rebuild_image_and_repaint();
+				}
+
+				show_message("pasted " + std::to_string(counter) + " bounding box" + (counter == 1 ? "" : "es"));
+			}
+			return true;
+			
+		// Zoom operations
+		case KeybindAction::ZoomIn:
+			{
+				const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
+				cv::Point zoom_point = cv::Point(
+					std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor),
+					std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor)
+				);
+				double zoom = user_specified_zoom_factor > 0.0 ? user_specified_zoom_factor : current_zoom_factor;
+				zoom = std::round(current_zoom_factor * 10.0 + 1.0) / 10.0;
+				if (zoom > 5.0)
+				{
+					zoom = 5.0;
+				}
+				setZoom(zoom, zoom_point);
+			}
+			return true;
+			
+		case KeybindAction::ZoomInLarge:
+			{
+				const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
+				cv::Point zoom_point = cv::Point(
+					std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor),
+					std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor)
+				);
+				setZoom(5.0, zoom_point);
+			}
+			return true;
+			
+		case KeybindAction::ZoomOut:
+			{
+				double zoom = user_specified_zoom_factor > 0.0 ? user_specified_zoom_factor : current_zoom_factor;
+				zoom -= 0.1;
+				setZoom(zoom, zoom_point_of_interest);
+			}
+			return true;
+			
+		case KeybindAction::ToggleAutoZoom:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				// go back to "auto" zoom
+				zoom_point_of_interest = cv::Size(0, 0);
+				previous_zoom_factor = user_specified_zoom_factor;
+				user_specified_zoom_factor = -1.0;
+				show_message("zoom: auto");
+			}
+			else
+			{
+				// restore the previous zoom factor around the current mouse position
+				const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
+				Log("zoom point of interest was: x=" + std::to_string(point.x) + " y=" + std::to_string(point.y));
+				zoom_point_of_interest.x = std::max(0, point.x) / current_zoom_factor;
+				zoom_point_of_interest.y = std::max(0, point.y) / current_zoom_factor;
+				Log("zoom point of interest now: x=" + std::to_string(zoom_point_of_interest.x) + " y=" + std::to_string(zoom_point_of_interest.y));
+				user_specified_zoom_factor = previous_zoom_factor;
+				show_message("zoom: " + std::to_string(static_cast<int>(user_specified_zoom_factor * 100.0)) + "%");
+			}
+			resized();
+			rebuild_image_and_repaint();
+			return true;
+			
+		// Display toggles
+		case KeybindAction::ToggleShowPredictions:
+			{
+				EToggle toggle = static_cast<EToggle>( (int(show_predictions) + 1) % 3 );
+				if (toggle == EToggle::kOn)
+				{
+					// skip "on" and go directly to "auto"
+					toggle = EToggle::kAuto;
+				}
+				toggle_show_predictions(toggle);
+				show_message("predictions: " + std::string(
+						toggle == EToggle::kOn	? "on"	:
+						toggle == EToggle::kOff	? "off"	: "auto"));
+			}
+			return true;
+			
+		case KeybindAction::ToggleShowMarks:
+			toggle_show_marks();
+			show_message("user marks: " + std::string(show_marks ? "visible" : "hidden"));
+			return true;
+			
+		case KeybindAction::ToggleShowLabels:
+			{
+				EToggle toggle = static_cast<EToggle>( (int(show_labels) + 1) % 3 );
+				set_labels(toggle);
+				show_message("labels: " + std::string(
+						toggle == EToggle::kOn	? "on"	:
+						toggle == EToggle::kOff	? "off"	: "auto"));
+			}
+			return true;
+			
+		case KeybindAction::ToggleBoldLabels:
+			toggle_bold_labels();
+			show_message("bold: " + std::string(all_marks_are_bold ? "enable" : "disable"));
+			return true;
+			
+		case KeybindAction::ToggleShadeRectangles:
+			toggle_shade_rectangles();
+			show_message("shade: " + std::string(shade_rectangles ? "enable" : "disable"));
+			return true;
+			
+		case KeybindAction::ToggleBlackAndWhiteMode:
+			toggle_black_and_white_mode();
+			return true;
+			
+		case KeybindAction::ToggleHeatmaps:
+			toggle_heatmaps();
+			return true;
+			
+		case KeybindAction::CycleHeatmaps:
+			if (heatmap_enabled)
+			{
+				cycle_heatmaps();
+			}
+			else
+			{
+				toggle_heatmaps();
+			}
+			return true;
+			
+		case KeybindAction::ToggleSnapping:
+			snapping_enabled = not snapping_enabled;
+			show_message("snapping: " + std::string(snapping_enabled ? "enable" : "disable"));
+			cfg().setValue("snapping_enabled", snapping_enabled);
+			return true;
+			
+		case KeybindAction::ToggleImageTiling:
+			if (dmapp().darkhelp_nn)
+			{
+				dmapp().darkhelp_nn->config.enable_tiles = ! dmapp().darkhelp_nn->config.enable_tiles;
+				show_message("image tiling: " + std::string(dmapp().darkhelp_nn->config.enable_tiles ? "enable" : "disable"));
+				load_image(image_filename_index);
+				cfg().setValue("darknet_image_tiling", dmapp().darkhelp_nn->config.enable_tiles);
+			}
+			return true;
+			
+		// Sorting
+		case KeybindAction::SortRandom:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			set_sort_order(ESort::kRandom);
+			show_message("re-shuffle random sort");
+			return true;
+			
+		case KeybindAction::SortAlphabetical:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			set_sort_order(ESort::kAlphabetical);
+			show_message("alphabetical sort");
+			return true;
+			
+		// Special modes
+		case KeybindAction::ToggleMassDeleteMode:
+			if (not mass_delete_mode_active)
+			{
+				mass_delete_mode_active = true;
+				show_message("Mass-delete mode activated. Click and drag to select an area.");
+			}
+			else
+			{
+				mass_delete_mode_active = false;
+				show_message("Mass-delete mode deactivated.");
+			}
+			return true;
+			
+		case KeybindAction::ToggleMergeMode:
+			if (not merge_mode_active)
+			{
+				startMultiBboxMergeMode();
+			}
+			else
+			{
+				cancelMultiBboxMerge();
+			}
+			return true;
+			
+		case KeybindAction::ConfirmMergeSelection:
+			// ENTER key - confirm selection in multi-bbox mode
+			if (multi_bbox_mode and merge_mode_active)
+			{
+				if (not first_frame_selected)
+				{
+					confirmFirstFrameSelection();
+				}
+				else
+				{
+					confirmSecondFrameSelection();
+				}
+			}
+			return true;
+			
+		case KeybindAction::ShowClassMenu:
+			create_class_menu().showMenuAsync(PopupMenu::Options());
+			return true;
+			
+		case KeybindAction::ShowSettings:
+			if (not dmapp().settings_wnd)
+			{
+				dmapp().settings_wnd.reset(new SettingsWnd(*this));
+			}
+			dmapp().settings_wnd->toFront(true);
+			return true;
+			
+		case KeybindAction::ShowKeybindEditor:
+			if (not dmapp().keybind_editor_wnd)
+			{
+				dmapp().keybind_editor_wnd.reset(new KeybindEditorWnd);
+			}
+			dmapp().keybind_editor_wnd->toFront(true);
+			return true;
+			
+		case KeybindAction::ShowFilter:
+			if (need_to_save)
+			{
+				save_json();
+				save_text();
+			}
+			if (not dmapp().filter_wnd)
+			{
+				dmapp().filter_wnd.reset(new FilterWnd(*this));
+			}
+			dmapp().filter_wnd->toFront(true);
+			return true;
+			
+		case KeybindAction::ShowJumpWindow:
+			show_jump_wnd();
+			return true;
+			
+		case KeybindAction::ShowAbout:
+			if (not dmapp().about_wnd)
+			{
+				dmapp().about_wnd.reset(new AboutWnd);
+			}
+			dmapp().about_wnd->toFront(true);
+			return true;
+			
+		case KeybindAction::ZoomAndReview:
+			zoom_and_review();
+			return true;
+			
+		case KeybindAction::SnapAnnotations:
+			if (selected_mark < 0)
+			{
+				size_t count = 0;
+				size_t skipped = 0;
+				for (size_t idx = 0; idx < marks.size(); idx ++)
+				{
+					if (marks[idx].is_prediction == false)
+					{
+						const auto adjusted = snap_annotation(idx);
+						if (adjusted)
+						{
+							count ++;
+						}
+						else
+						{
+							skipped ++;
+						}
+					}
+				}
+
+				const auto total = count + skipped;
+				if (total == 0)
+				{
+					show_message("no annotations to snap");
+				}
+				else
+				{
+					show_message("snapped " + std::to_string(count) + " annotation" + (count == 1 ? "" : "s"));
+				}
+			}
+			else
+			{
+				const auto adjusted = snap_annotation(selected_mark);
+				if (adjusted)
+				{
+					show_message("snapped selected annotation");
+				}
+				else
+				{
+					show_message("selected annotation was not snapped");
+				}
+			}
+			return true;
+			
+		case KeybindAction::MarkImageEmpty:
+			if (number_of_marks == 0)
+			{
+				if (user_specified_zoom_factor > 0.0)
+				{
+					handleKeybindAction(KeybindAction::ToggleAutoZoom);
+				}
+				image_is_completely_empty = true;
+				need_to_save = true;
+
+				if (cfg().get_bool("move_to_next_image_after_n"))
+				{
+					// pretend as if PAGEDOWN was pressed so we move to the next image
+					return handleKeybindAction(KeybindAction::NavigatePageDown);
+				}
+				// reload the image so we can see the result of marking it as a negative sample
+				load_image(image_filename_index);
+				return true;
+			}
+
+			show_message("delete annotations before marking the image as empty");
+			return true;
+			
+		case KeybindAction::CopyMarksFromPrevious:
+			copy_marks_from_previous_image();
+			return true;
+			
+		case KeybindAction::CopyMarksFromNext:
+			copy_marks_from_next_image();
+			return true;
+			
+		case KeybindAction::SaveScreenshot:
+			save_screenshot(false);
+			return true;
+			
+		case KeybindAction::SaveScreenshotFullSize:
+			save_screenshot(true);
+			return true;
+			
+		// Class selection
+		case KeybindAction::SelectClass0:
+		case KeybindAction::SelectClass1:
+		case KeybindAction::SelectClass2:
+		case KeybindAction::SelectClass3:
+		case KeybindAction::SelectClass4:
+		case KeybindAction::SelectClass5:
+		case KeybindAction::SelectClass6:
+		case KeybindAction::SelectClass7:
+		case KeybindAction::SelectClass8:
+		case KeybindAction::SelectClass9:
+		case KeybindAction::SelectClass10:
+		case KeybindAction::SelectClass11:
+		case KeybindAction::SelectClass12:
+		case KeybindAction::SelectClass13:
+		case KeybindAction::SelectClass14:
+		case KeybindAction::SelectClass15:
+		case KeybindAction::SelectClass16:
+		case KeybindAction::SelectClass17:
+		case KeybindAction::SelectClass18:
+		case KeybindAction::SelectClass19:
+		case KeybindAction::SelectClass20:
+		case KeybindAction::SelectClass21:
+		case KeybindAction::SelectClass22:
+		case KeybindAction::SelectClass23:
+		case KeybindAction::SelectClass24:
+		case KeybindAction::SelectClass25:
+		case KeybindAction::SelectClass26:
+		case KeybindAction::SelectClass27:
+		case KeybindAction::SelectClass28:
+		case KeybindAction::SelectClass29:
+			{
+				int class_idx = static_cast<int>(action) - static_cast<int>(KeybindAction::SelectClass0);
+				set_class(class_idx);
+			}
+			return true;
+			
+		// Special actions
+		case KeybindAction::Quit:
+			if (user_specified_zoom_factor > 0.0)
+			{
+				// get out of zoom mode instead of quitting from the application
+				return handleKeybindAction(KeybindAction::ToggleAutoZoom);
+			}
+			else if (merge_mode_active)
+			{
+				show_message("Merge mode cancelled.");
+				merge_mode_active = false;
+				merge_start_marks.clear();
+				return true;
+			}
+			else if (mass_delete_mode_active)
+			{
+				show_message("Mass-delete mode cancelled.");
+				mass_delete_mode_active = false;
+				return true;
+			}
+			dmapp().wnd->closeButtonPressed();
+			return true;
+			
+		case KeybindAction::Unknown:
+		default:
+			return false;
+	}
 }

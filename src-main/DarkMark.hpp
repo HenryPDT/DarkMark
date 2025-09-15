@@ -48,6 +48,7 @@ namespace dm
 	class DMCanvas;
 	class Notebook;
 	class DMContent;
+	class KeybindManager;
 	class DMJumpWnd;
 	class DMStatsWnd;
 	class AboutWnd;
@@ -61,6 +62,7 @@ namespace dm
 	class VideoImportWindow;
 	class SettingsWnd;
 	class FilterWnd;
+	class KeybindEditorWnd;
 	class ProjectInfo;
 	class DMContentReview;
 	class DMContentReviewIoU;
@@ -92,6 +94,7 @@ namespace dm
 #include "Text.hpp"
 #include "Log.hpp"
 #include "Cfg.hpp"
+#include "KeybindManager.hpp"
 #include "Bitmaps.hpp"
 #include "Mark.hpp"
 #include "Tools.hpp"
@@ -116,6 +119,7 @@ namespace dm
 #include "ClassIdWnd.hpp"
 #include "SettingsWnd.hpp"
 #include "FilterWnd.hpp"
+#include "KeybindEditorWnd.hpp"
 #include "StartupCanvas.hpp"
 #include "DMContentImportTxt.hpp"
 #include "DMContentReloadResave.hpp"

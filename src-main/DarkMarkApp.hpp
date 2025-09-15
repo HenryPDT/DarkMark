@@ -33,6 +33,7 @@ namespace dm
 			TooltipWindow tool_tip;
 
 			std::unique_ptr<Cfg>				cfg;
+			std::unique_ptr<KeybindManager>		keybind_manager;
 			std::unique_ptr<OnnxHelp::NN>		onnx_nn;
 			std::unique_ptr<DMWnd>				wnd;
 			std::unique_ptr<DarkHelp::NN>		darkhelp_nn;
@@ -46,6 +47,7 @@ namespace dm
 			std::unique_ptr<SettingsWnd>		settings_wnd;
 			std::unique_ptr<FilterWnd>			filter_wnd;
 			std::unique_ptr<ClassIdWnd>			class_id_wnd;
+			std::unique_ptr<KeybindEditorWnd>	keybind_editor_wnd;
 			std::unique_ptr<WndCfgTemplates>	cfg_template_wnd;
 	};
 

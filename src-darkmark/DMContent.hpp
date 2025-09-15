@@ -46,6 +46,9 @@ namespace dm
 			virtual void resized() override;
 
 			virtual bool keyPressed(const KeyPress &key) override;
+			
+			/// Handle a keybind action
+			bool handleKeybindAction(KeybindAction action);
 
 			void start_darknet();
 
