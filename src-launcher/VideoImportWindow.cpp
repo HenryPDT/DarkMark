@@ -846,8 +846,17 @@ void dm::VideoImportWindow::run()
 			Log("about to start extracting " + std::to_string(frames_needed.size()) + " frames from " + filename);
 
 			size_t frame_number = 0;
+			size_t previous_frame_number = 0;
+			size_t stuck_frame_count = 0;
 			while (threadShouldExit() == false)
 			{
+				// Safety check: prevent infinite loops in "extract all frames" mode
+				if (extract_all_frames && frame_number >= number_of_frames)
+				{
+					Log("reached end of video (frame " + std::to_string(frame_number) + " >= " + std::to_string(number_of_frames) + ") - breaking out of loop");
+					break;
+				}
+
 				if (extract_sequences or extract_maximum_frames or extract_percentage)
 				{
 					if (frames_needed.empty())
@@ -861,8 +870,18 @@ void dm::VideoImportWindow::run()
 					if (frame_number != next_frame_needed)
 					{
 						// only explicitely set the absolute frame position if the frames are not consecutive
-						cap.set(cv::VideoCaptureProperties::CAP_PROP_POS_FRAMES, static_cast<double>(next_frame_needed));
-						frame_number = next_frame_needed;
+						// but first check if the frame position is valid
+						if (next_frame_needed < number_of_frames)
+						{
+							cap.set(cv::VideoCaptureProperties::CAP_PROP_POS_FRAMES, static_cast<double>(next_frame_needed));
+							frame_number = next_frame_needed;
+						}
+						else
+						{
+							// frame position is beyond video length, skip this frame
+							Log("skipping frame " + std::to_string(next_frame_needed) + " as it's beyond video length (" + std::to_string(number_of_frames) + ")");
+							continue;
+						}
 					}
 				}
 
@@ -870,10 +889,26 @@ void dm::VideoImportWindow::run()
 				cap >> mat;
 				if (mat.empty())
 				{
-					// must have reached the EOF
-					Log("received an empty mat while reading frame #" + std::to_string(frame_number));
-					continue;
+					// must have reached the EOF - break out of the loop to prevent infinite hanging
+					Log("received an empty mat while reading frame #" + std::to_string(frame_number) + " - reached end of video");
+					break;
 				}
+
+				// Check if we're stuck at the same frame (video capture not advancing)
+				if (frame_number == previous_frame_number)
+				{
+					stuck_frame_count++;
+					if (stuck_frame_count > 10) // Allow a few retries before giving up
+					{
+						Log("video capture appears to be stuck at frame " + std::to_string(frame_number) + " - breaking out of loop");
+						break;
+					}
+				}
+				else
+				{
+					stuck_frame_count = 0; // Reset counter when frame advances
+				}
+				previous_frame_number = frame_number;
 
 				if (resize_frame and (mat.cols != new_width or mat.rows != new_height))
 				{
