@@ -86,6 +86,19 @@ dm::Cfg & dm::Cfg::first_time_initialization(void)
 	insert_if_not_exist("heatmap_visualize"				, 2													);
 	insert_if_not_exist("show_dots"						, false												);
 
+	insert_if_not_exist("video_import_auto_annotation_enabled", false);
+	insert_if_not_exist("video_import_model_type", "darknet");
+	insert_if_not_exist("video_import_darknet_weights", "");
+	insert_if_not_exist("video_import_darknet_cfg", "");
+	insert_if_not_exist("video_import_darknet_names", "");
+	insert_if_not_exist("video_import_onnx_model", "");
+	insert_if_not_exist("video_import_onnx_names", "");
+	insert_if_not_exist("video_import_confidence_threshold", 25);
+	insert_if_not_exist("video_import_nms_threshold", 25);
+	insert_if_not_exist("video_import_hierarchy_threshold", 25);
+	insert_if_not_exist("video_import_enable_tiling", false);
+	insert_if_not_exist("video_import_detection_filter", "all");
+
 	// see at the bottom of this method where these two are initialized
 	insert_if_not_exist("darknet_executable"			, ""												);
 	insert_if_not_exist("darknet_templates"				, ""												);
