@@ -48,6 +48,6 @@ ADD_SUBDIRECTORY ( src-onnx	)
 ADD_SUBDIRECTORY ( src-main		)
 ADD_SUBDIRECTORY ( src-dox		)
 
-IF (UNIX)
+IF (UNIX AND NOT APPLE)
 	ADD_SUBDIRECTORY ( src-ubuntu	)
 ENDIF ()

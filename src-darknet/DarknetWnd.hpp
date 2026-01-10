@@ -49,12 +49,15 @@ namespace dm
 
 			void random_zoom_images(ThreadWithProgressWindow & progress_window, const VStr & annotated_images, VStr & all_output_images, size_t & number_of_marks, size_t & number_of_zooms_created, size_t & number_of_empty_images);
 
+			void drop_small_annotations(ThreadWithProgressWindow & progress_window, const VStr & all_output_images, size_t & number_of_annotations_dropped);
+
 			void create_Darknet_configuration_file(ThreadWithProgressWindow & progress_window);
 			void create_Darknet_shell_scripts();
 
 			CfgHandler cfg_handler;
 
 			Value v_cfg_template;
+			Value v_extra_flags;
 			Value v_train_with_all_images;
 			Value v_training_images_percentage;
 			Value v_limit_validation_images;
@@ -65,6 +68,7 @@ namespace dm
 			Value v_iterations;
 			Value v_learning_rate;
 			Value v_max_chart_loss;
+			Value v_image_type;
 			Value v_do_not_resize_images;
 			Value v_resize_images;
 			Value v_tile_images;

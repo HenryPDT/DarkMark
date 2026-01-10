@@ -273,6 +273,7 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 	}
 
 	v_cfg_template					= info.cfg_template.c_str();
+	v_extra_flags					= info.extra_flags.c_str();
 	v_train_with_all_images			= info.train_with_all_images;
 	v_training_images_percentage	= std::round(100.0 * info.training_images_percentage);
 	v_limit_validation_images		= info.limit_validation_images;
@@ -283,6 +284,7 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 	v_iterations					= info.iterations;
 	v_learning_rate					= info.learning_rate;
 	v_max_chart_loss				= info.max_chart_loss;
+	v_image_type					= info.image_type.c_str();
 	v_do_not_resize_images			= info.do_not_resize_images;
 	v_resize_images					= info.resize_images;
 	v_tile_images					= info.tile_images;
@@ -328,10 +330,11 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 	v_zoom_images			.addListener(this);
 
 	Array<PropertyComponent *> properties;
-//	TextPropertyComponent		* t = nullptr;
+	TextPropertyComponent		* t = nullptr;
 	BooleanPropertyComponent	* b = nullptr;
 	SliderPropertyComponent		* s = nullptr;
 	ButtonPropertyComponent		* u = nullptr;
+	ChoicePropertyComponent		* dd = nullptr; // drop-down menu
 
 	if (normal_interface)
 	{
@@ -340,6 +343,10 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 		properties.add(u);
 
 		template_button = u;
+
+		t = new TextPropertyComponent(v_extra_flags, getText("extra flags"), 50, false, true);
+		setTooltip(t, "Other parameters to pass to Darknet when training.");
+		properties.add(t);
 
 		pp.addSection("darknet", properties, true);
 		properties.clear();
@@ -384,6 +391,12 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 
 	pp.addSection(getText("configuration"), properties, true);
 	properties.clear();
+
+	const StringArray choices = {"JPG: real-world images, lossy compression", "PNG: text docs or sharp edges, non-lossy", "both: use a random mix of JPG and PNG"};
+	const Array<var> values = {"JPG", "PNG", "both"};
+	dd = new ChoicePropertyComponent(v_image_type, "format for cache images", choices, values);
+	setTooltip(dd, "Which format to use when saving training images in the DarkMark image cache?  If training a network to detect text or images with very clear sharp edges and lines where JPEG artifacts may cause problems, you likely want \"PNG\" or \"both\".  If using real world images, then you likely want JPG.  If in doubt, choose \"both\" which will work in all situations but saving the cache images takes slightly longer.");
+	properties.add(dd);
 
 	b = new BooleanPropertyComponent(v_do_not_resize_images, getText("do not resize images"), getText("do not resize images"));
 	setTooltip(b, "Images will be left exactly as they are. This means Darknet will be responsible for resizing them to match the network dimensions during training. This is not recommended.");
@@ -609,7 +622,7 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 
 	if (normal_interface)
 	{
-		r = r.withSizeKeepingCentre(550, 700);
+		r = r.withSizeKeepingCentre(550, 750);
 	}
 	else
 	{
@@ -786,6 +799,7 @@ void dm::DarknetWnd::buttonClicked(Button * button)
 	canvas.setEnabled(false);
 
 	cfg().setValue(content.cfg_prefix + "darknet_cfg_template"			, v_cfg_template				);
+	cfg().setValue(content.cfg_prefix + "darknet_extra_flags"			, v_extra_flags					);
 	cfg().setValue(content.cfg_prefix + "darknet_train_with_all_images"	, v_train_with_all_images		);
 	cfg().setValue(content.cfg_prefix + "darknet_training_percentage"	, v_training_images_percentage	);
 	cfg().setValue(content.cfg_prefix + "darknet_limit_validation_images",v_limit_validation_images		);
@@ -796,6 +810,7 @@ void dm::DarknetWnd::buttonClicked(Button * button)
 	cfg().setValue(content.cfg_prefix + "darknet_iterations"			, v_iterations					);
 	cfg().setValue(content.cfg_prefix + "darknet_learning_rate"			, v_learning_rate				);
 	cfg().setValue(content.cfg_prefix + "darknet_max_chart_loss"		, v_max_chart_loss				);
+	cfg().setValue(content.cfg_prefix + "darknet_image_type"			, v_image_type					);
 	cfg().setValue(content.cfg_prefix + "darknet_do_not_resize_images"	, v_do_not_resize_images		);
 	cfg().setValue(content.cfg_prefix + "darknet_resize_images"			, v_resize_images				);
 	cfg().setValue(content.cfg_prefix + "darknet_tile_images"			, v_tile_images					);
@@ -819,6 +834,7 @@ void dm::DarknetWnd::buttonClicked(Button * button)
 	cfg().setValue(content.cfg_prefix + "darknet_mixup"					, v_mixup						);
 
 	info.cfg_template				= v_cfg_template			.toString().toStdString();
+	info.extra_flags				= v_extra_flags				.toString().toStdString();
 	info.train_with_all_images		= v_train_with_all_images	.getValue();
 	info.training_images_percentage	= static_cast<double>(v_training_images_percentage.getValue()) / 100.0;
 	info.limit_validation_images	= v_limit_validation_images	.getValue();
@@ -829,6 +845,7 @@ void dm::DarknetWnd::buttonClicked(Button * button)
 	info.iterations					= v_iterations				.getValue();
 	info.learning_rate				= v_learning_rate			.getValue();
 	info.max_chart_loss				= v_max_chart_loss			.getValue();
+	info.image_type					= v_image_type				.toString().toStdString();
 	info.do_not_resize_images		= v_do_not_resize_images	.getValue();
 	info.resize_images				= v_resize_images			.getValue();
 	info.tile_images				= v_tile_images				.getValue();
@@ -1287,69 +1304,9 @@ void dm::DarknetWnd::create_Darknet_training_and_validation_files(
 	if (info.do_not_resize_images == false and info.remove_small_annotations)
 	{
 		// go through all of the annotations and see if anything needs to be dropped
-		double work_done = 0.0;
-		double work_to_do = all_output_images.size() + 1.0;
-		progress_window.setProgress(0.0);
-		progress_window.setStatusMessage(dm::getText("Looking for annotations too small to detect..."));
 
-		const double image_width = info.image_width;
-		const double image_height = info.image_height;
-
-		for (size_t idx = 0; idx < all_output_images.size(); idx ++)
-		{
-			work_done ++;
-			progress_window.setProgress(work_done / work_to_do);
-
-			const auto txt = std::filesystem::path(all_output_images[idx]).replace_extension(".txt");
-			if (std::filesystem::file_size(txt) == 0)
-			{
-				continue;
-			}
-
-			std::stringstream ss;
-			ss << std::fixed << std::setprecision(10);
-
-			size_t lines_dropped_in_this_file = 0;
-			size_t lines_kept_in_this_file = 0;
-			std::ifstream ifs(txt.string());
-			int class_id = -1;
-			double cx = -1.0;
-			double cy = -1.0;
-			double w = -1.0;
-			double h = -1.0;
-			while (ifs.good())
-			{
-				ifs >> class_id >> cx >> cy >> w >> h;
-				if (class_id >= 0 and cx > 0.0 and cy > 0.0 and w > 0.0 and h > 0.0)
-				{
-					const int annotation_width = std::round(image_width * w);
-					const int annotation_height = std::round(image_height * h);
-					const int area = annotation_width * annotation_height;
-
-					if (area <= info.annotation_area_size)
-					{
-						// this annotation is too small, so don't bother remembering it (we'll re-write the .txt file without this line)
-						Log(txt.string() + ": dropping annotation (too small): class #" + std::to_string(class_id) + " w=" + std::to_string(annotation_width) + " h=" + std::to_string(annotation_height) + " area=" + std::to_string(area) + " limit=" + std::to_string(info.annotation_area_size));
-						number_of_dropped_annotations ++;
-						lines_dropped_in_this_file ++;
-						continue;
-					}
-
-					// otherwise, remember this annotation
-					lines_kept_in_this_file ++;
-					ss << class_id << " " << cx << " " << cy << " " << w << " " << h << std::endl;
-				}
-			}
-			ifs.close();
-
-			if (lines_dropped_in_this_file > 0)
-			{
-				// we must have decided to drop an annotation, so re-write the .txt file
-				Log(txt.string() + ": dropped=" + std::to_string(lines_dropped_in_this_file) + " retained=" + std::to_string(lines_kept_in_this_file));
-				std::ofstream ofs(txt.string());
-				ofs << ss.str();
-			}
-		}
+		Log("drop small annotations");
+		drop_small_annotations(progress_window, all_output_images, number_of_dropped_annotations);
 	}
 
 	// now that we know the exact set of images (including resized and tiled images)
@@ -1450,7 +1407,14 @@ void dm::DarknetWnd::create_Darknet_shell_scripts()
 
 	if (true)
 	{
-		std::string cmd = cfg().get_str("darknet_executable") + " detector -map" + (v_verbose_output.getValue() ? " -verbose" : "") + (v_keep_augmented_images.getValue() ? " -show_imgs" : "") + " -dont_show train " + info.data_filename + " " + info.cfg_filename;
+		std::string cmd =
+				cfg().get_str("darknet_executable") +
+				" detector train " +
+				(v_verbose_output		.getValue() ? "-verbose "	: "") +
+				(v_keep_augmented_images.getValue() ? "-show_imgs "	: "") +
+				v_extra_flags.toString().toStdString() + " " +
+				info.data_filename + " " + info.cfg_filename;
+
 		if (info.save_weights > 0)
 		{
 			cmd += " --save-weights " + std::to_string(info.save_weights);

@@ -86,9 +86,7 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	txt_seed.setInputFilter(new TextEditor::LengthAndCharacterRestriction(10, "0123456789"), true);
 	txt_seed.setTooltip("Enter a numeric seed for reproducible splits, or leave empty for random");
 	
-	// Style the help text
-	help_seed.setFont(Font(12.0f, Font::italic));
-	help_seed.setColour(Label::textColourId, Colours::lightgrey);
+	help_seed.setFont(Font(FontOptions(12.0f, Font::italic)));
 
 	// Add toggle listener to enable/disable split controls
 	cb_enable_split.onStateChange = [this]() { updateSplitControls(); };
@@ -1641,6 +1639,8 @@ void dm::ClassIdWnd::rebuild_table()
 		}
 	}
 
+//	dm::Log("done=" + std::to_string(done_looking_for_images) + " error_count=" + std::to_string(error_count) + " next_class_id=" + std::to_string(next_class_id));
+
 	export_button	.setEnabled(done_looking_for_images and error_count == 0 and next_class_id > 0);
 	apply_button	.setEnabled(done_looking_for_images and error_count == 0 and next_class_id > 0 and changes_to_apply);
 
@@ -1662,6 +1662,10 @@ void dm::ClassIdWnd::count_images_and_marks()
 		VStr image_filenames;
 		VStr ignored_filenames;
 
+		int previous_percentage = -1;
+		const auto export_button_text = export_button.getButtonText();
+		export_button.setButtonText("Verifying...");
+
 		find_files(dir, image_filenames, ignored_filenames, ignored_filenames, done);
 		ignored_filenames.clear();
 
@@ -1669,6 +1673,17 @@ void dm::ClassIdWnd::count_images_and_marks()
 
 		for (size_t idx = 0; idx < image_filenames.size() and not done and not threadShouldExit(); idx ++)
 		{
+			// don't bother updating the button if there is a trivial number of images
+			if (image_filenames.size() > 100)
+			{
+				const int percentage = std::round(idx * 100.0f / image_filenames.size());
+				if (percentage != previous_percentage)
+				{
+					export_button.setButtonText("Verifying " + std::to_string(percentage) + "% ...");
+					previous_percentage = percentage;
+				}
+			}
+
 			auto & fn = image_filenames[idx];
 			File file = File(fn).withFileExtension(".txt");
 			if (file.exists())
@@ -1743,6 +1758,8 @@ void dm::ClassIdWnd::count_images_and_marks()
 		{
 			dm::Log("-> class #" + std::to_string(k) + ": " + std::to_string(v) + " total annotations");
 		}
+
+		export_button.setButtonText(export_button_text);
 
 		if (error_count)
 		{
