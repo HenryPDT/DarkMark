@@ -301,6 +301,44 @@ void dm::DMContent::start_darknet()
 					}
 				}
 				
+				// Set preprocessing configuration based on config or auto-detect from filename
+				if (dmapp().onnx_nn)
+				{
+					// Check for explicit config setting first (0=auto, 1=yolox, 2=dfine)
+					int preprocess_mode = cfg().get_int(cfg_prefix + "onnx_preprocess_mode");
+					
+					if (preprocess_mode == 0)
+					{
+						// Auto-detect based on filename
+						std::string lower_filename = weights_filename;
+						std::transform(lower_filename.begin(), lower_filename.end(), lower_filename.begin(), ::tolower);
+						
+						if (lower_filename.find("dfine") != std::string::npos ||
+							lower_filename.find("rtdetr") != std::string::npos ||
+							lower_filename.find("rt-detr") != std::string::npos ||
+							lower_filename.find("detr") != std::string::npos)
+						{
+							dmapp().onnx_nn->set_preprocess_config(OnnxHelp::PreprocessConfig::dfine());
+							Log("Auto-detected D-FINE/DETR-style model, using direct resize preprocessing");
+						}
+						else
+						{
+							dmapp().onnx_nn->set_preprocess_config(OnnxHelp::PreprocessConfig::yolox());
+							Log("Using YOLOX-style preprocessing (letterbox)");
+						}
+					}
+					else if (preprocess_mode == 2)
+					{
+						dmapp().onnx_nn->set_preprocess_config(OnnxHelp::PreprocessConfig::dfine());
+						Log("Using D-FINE/DETR-style preprocessing (direct resize)");
+					}
+					else
+					{
+						dmapp().onnx_nn->set_preprocess_config(OnnxHelp::PreprocessConfig::yolox());
+						Log("Using YOLOX-style preprocessing (letterbox)");
+					}
+				}
+				
 				Log("ONNX model loaded.");
 			}
 			catch (const std::exception & e)

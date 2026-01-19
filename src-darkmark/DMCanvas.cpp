@@ -171,6 +171,16 @@ void dm::DMCanvas::rebuild_cache_image()
 			std::find(content.selected_marks_for_merge.begin(), content.selected_marks_for_merge.end(), static_cast<int>(idx)) != content.selected_marks_for_merge.end();
 		const std::string name	= m.description;
 		const cv::Rect r		= m.get_bounding_rect(content.scaled_image.size());
+		
+		// Skip marks with invalid bounding rectangles
+		if (r.width <= 0 || r.height <= 0 ||
+			r.x < 0 || r.y < 0 ||
+			r.x + r.width > content.scaled_image.cols ||
+			r.y + r.height > content.scaled_image.rows)
+		{
+			continue;
+		}
+		
 		cv::Scalar colour		= m.get_colour();
 		int thickness			= (mouse_drag_is_active == false and (is_selected or content.all_marks_are_bold) ? 2 : 1);
 		

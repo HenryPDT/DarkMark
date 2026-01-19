@@ -151,8 +151,18 @@ cv::Rect dm::Mark::get_bounding_rect() const
 	// limit the rectangle to the exact size of the image
 	if (r.x < 0) r.x = 0;
 	if (r.y < 0) r.y = 0;
-	if (r.x + r.width	> image_dimensions.width)		r.width		= image_dimensions.width	- r.x;
-	if (r.y + r.height	> image_dimensions.height)		r.height	= image_dimensions.height	- r.y;
+	if (r.x >= image_dimensions.width) r.x = std::max(0, image_dimensions.width - 1);
+	if (r.y >= image_dimensions.height) r.y = std::max(0, image_dimensions.height - 1);
+	if (r.x + r.width > image_dimensions.width) r.width = image_dimensions.width - r.x;
+	if (r.y + r.height > image_dimensions.height) r.height = image_dimensions.height - r.y;
+
+	// Ensure minimum dimensions of 1 pixel
+	if (r.width <= 0) r.width = 1;
+	if (r.height <= 0) r.height = 1;
+
+	// Final clamp to ensure we don't exceed image bounds
+	if (r.x + r.width > image_dimensions.width) r.width = image_dimensions.width - r.x;
+	if (r.y + r.height > image_dimensions.height) r.height = image_dimensions.height - r.y;
 
 	return r;
 }
@@ -266,6 +276,17 @@ dm::Mark & dm::Mark::set(cv::Rect & r)
 {
 	const double image_width	= static_cast<double>(image_dimensions.width);
 	const double image_height	= static_cast<double>(image_dimensions.height);
+	
+	// Validate and clamp rect to image boundaries
+	if (r.x < 0) r.x = 0;
+	if (r.y < 0) r.y = 0;
+	if (r.width <= 0) r.width = 1;
+	if (r.height <= 0) r.height = 1;
+	if (r.x >= image_dimensions.width) r.x = std::max(0, image_dimensions.width - 1);
+	if (r.y >= image_dimensions.height) r.y = std::max(0, image_dimensions.height - 1);
+	if (r.x + r.width > image_dimensions.width) r.width = image_dimensions.width - r.x;
+	if (r.y + r.height > image_dimensions.height) r.height = image_dimensions.height - r.y;
+	
 	const double minx			= static_cast<double>(r.x)				/ image_width;
 	const double miny			= static_cast<double>(r.y)				/ image_height;
 	const double maxx			= static_cast<double>(r.x + r.width)	/ image_width;

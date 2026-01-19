@@ -1046,6 +1046,24 @@ void dm::VideoImportWindow::load_onnx_model()
 
 		temp_onnx_nn.reset(new OnnxHelp::NN(onnx_model_path, names));
 		class_names = names;
+		
+		// Auto-detect preprocessing mode based on filename
+		std::string lower_filename = onnx_model_path;
+		std::transform(lower_filename.begin(), lower_filename.end(), lower_filename.begin(), ::tolower);
+		
+		if (lower_filename.find("dfine") != std::string::npos ||
+			lower_filename.find("rtdetr") != std::string::npos ||
+			lower_filename.find("rt-detr") != std::string::npos ||
+			lower_filename.find("detr") != std::string::npos)
+		{
+			temp_onnx_nn->set_preprocess_config(OnnxHelp::PreprocessConfig::dfine());
+			Log("Auto-detected D-FINE/DETR-style model, using direct resize preprocessing");
+		}
+		else
+		{
+			temp_onnx_nn->set_preprocess_config(OnnxHelp::PreprocessConfig::yolox());
+			Log("Using YOLOX-style preprocessing (letterbox)");
+		}
 
 		Log("ONNX model loaded successfully");
 	}

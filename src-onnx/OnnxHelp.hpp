@@ -23,6 +23,39 @@ namespace OnnxHelp
 
 	typedef std::vector<PredictionResult> PredictionResults;
 
+	/** Preprocessing configuration for ONNX models.
+	 * Different models may require different preprocessing:
+	 * - YOLOX: letterbox, [0-255] BGR
+	 * - D-FINE/RT-DETR: direct resize, [0-1] BGR
+	 */
+	struct PreprocessConfig
+	{
+		bool maintain_aspect_ratio = true;  ///< true = letterbox, false = direct resize
+		float scale_factor = 1.0f;          ///< 1.0 for [0-255], 1/255 for [0-1]
+		bool bgr_to_rgb = false;            ///< true = convert BGR to RGB
+		
+		/// Preset for YOLOX-style models (letterbox, [0-255] BGR)
+		static PreprocessConfig yolox() {
+			return PreprocessConfig{true, 1.0f, false};
+		}
+		
+		/// Preset for D-FINE/RT-DETR-style models (direct resize, [0-1] BGR)
+		static PreprocessConfig dfine() {
+			return PreprocessConfig{false, 1.0f/255.0f, false};
+		}
+	};
+
+	/** Neural network class for ONNX models with DeepStream-compatible output format.
+	 * 
+	 * Supports any ONNX object detection model that outputs the DeepStream format:
+	 * - Input: [batch, channels, height, width] (NCHW format)
+	 * - Output: [batch, num_detections, 6] where 6 = [x1, y1, x2, y2, score, class_id]
+	 * 
+	 * Compatible models include:
+	 * - YOLOX, YOLOv7, YOLOv8, YOLOv9, YOLOv10, YOLO11 (use PreprocessConfig::yolox())
+	 * - D-FINE, RT-DETR, and other transformer-based detectors (use PreprocessConfig::dfine())
+	 * - Any model exported with DeepStream-YOLO compatible output format
+	 */
 	class NN
 	{
 		public:
@@ -38,10 +71,17 @@ namespace OnnxHelp
 			
 			// Get current input size
 			cv::Size get_input_size() const { return input_size; }
+			
+			// Set preprocessing configuration
+			void set_preprocess_config(const PreprocessConfig& config);
+			
+			// Get current preprocessing configuration
+			PreprocessConfig get_preprocess_config() const { return preprocess_config; }
 
 		private:
 			static Ort::SessionOptions GetSessionOptions();
 			static cv::Size GetModelInputSize(Ort::Session& session, bool& is_dynamic);
+			static void ValidateOutputFormat(Ort::Session& session);
 			Ort::Env env;
 			mutable Ort::Session session;
 			Ort::AllocatorWithDefaultOptions allocator;
@@ -53,6 +93,7 @@ namespace OnnxHelp
 			cv::Size input_size;
 			bool is_dynamic_input;
 			std::vector<std::string> class_names;
+			PreprocessConfig preprocess_config;
 
 			// Cached vectors to avoid repeated allocations
 			mutable std::vector<float> input_tensor_values;
@@ -60,6 +101,6 @@ namespace OnnxHelp
 			mutable std::vector<const char*> input_names;
 			mutable std::vector<const char*> output_names;
 
-			void resize_unscale(const cv::Mat& mat, cv::Mat& mat_rs, float& ratio) const;
+			void preprocess_image(const cv::Mat& mat, cv::Mat& mat_rs, float& scale_x, float& scale_y) const;
 	};
 }
