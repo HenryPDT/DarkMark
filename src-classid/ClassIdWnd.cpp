@@ -17,6 +17,7 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	btn_darknet_yolo("Darknet/YOLOv4"),
 	btn_yolov5("YOLOv5"),
 	btn_coco("COCO"),
+	btn_dfine("D-FINE"),
 	cb_enable_split("Enable train/validation split"),
 	lbl_train_percentage("", "Training %:"),
 	sl_train_percentage(Slider::SliderStyle::LinearHorizontal, Slider::TextEntryBoxPosition::TextBoxRight),
@@ -29,7 +30,8 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	ok_pressed(false),
 	export_all_images(false),
 	export_yolov5_format(false),
-	export_coco_format(false)
+	export_coco_format(false),
+	export_dfine_format(false)
 {
 	setContentNonOwned(&canvas, true);
 	setUsingNativeTitleBar(true);
@@ -44,6 +46,7 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	canvas.addAndMakeVisible(btn_darknet_yolo);
 	canvas.addAndMakeVisible(btn_yolov5);
 	canvas.addAndMakeVisible(btn_coco);
+	canvas.addAndMakeVisible(btn_dfine);
 	canvas.addAndMakeVisible(cb_enable_split);
 	canvas.addAndMakeVisible(lbl_train_percentage);
 	canvas.addAndMakeVisible(sl_train_percentage);
@@ -63,9 +66,11 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	btn_darknet_yolo.setToggleState(true, NotificationType::dontSendNotification); // Default to Darknet/YOLOv4
 	export_yolov5_format = false;
 	export_coco_format = false;
+	export_dfine_format = false;
 	btn_darknet_yolo.setColour(TextButton::buttonOnColourId, Colours::lightgreen);
 	btn_yolov5.setColour(TextButton::buttonOnColourId, Colours::lightgreen);
 	btn_coco.setColour(TextButton::buttonOnColourId, Colours::lightgreen);
+	btn_dfine.setColour(TextButton::buttonOnColourId, Colours::lightgreen);
 
 	// Set up split controls
 	cb_enable_split.setToggleState(false, NotificationType::dontSendNotification); // Default disabled
@@ -97,6 +102,7 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	btn_darknet_yolo.addListener(this);
 	btn_yolov5.addListener(this);
 	btn_coco.addListener(this);
+	btn_dfine.addListener(this);
 	ok_button.addListener(this);
 	cancel_button.addListener(this);
 
@@ -188,11 +194,13 @@ void dm::ExportDialog::resized()
 	FlexBox fb_formats;
 	fb_formats.flexDirection = FlexBox::Direction::row;
 	fb_formats.justifyContent = FlexBox::JustifyContent::flexStart;
-	fb_formats.items.add(FlexItem(btn_darknet_yolo).withWidth(120.0f).withHeight(height));
-	fb_formats.items.add(FlexItem().withWidth(margin_size));
-	fb_formats.items.add(FlexItem(btn_yolov5).withWidth(100.0f).withHeight(height));
-	fb_formats.items.add(FlexItem().withWidth(margin_size));
-	fb_formats.items.add(FlexItem(btn_coco).withWidth(100.0f).withHeight(height));
+	fb_formats.items.add(FlexItem(btn_darknet_yolo).withWidth(110.0f).withHeight(height));
+	fb_formats.items.add(FlexItem().withWidth(5));
+	fb_formats.items.add(FlexItem(btn_yolov5).withWidth(80.0f).withHeight(height));
+	fb_formats.items.add(FlexItem().withWidth(5));
+	fb_formats.items.add(FlexItem(btn_coco).withWidth(70.0f).withHeight(height));
+	fb_formats.items.add(FlexItem().withWidth(5));
+	fb_formats.items.add(FlexItem(btn_dfine).withWidth(80.0f).withHeight(height));
 	fb_rows.items.add(FlexItem(fb_formats).withHeight(height).withMargin(FlexItem::Margin(0, 0, margin_size, 0)));
 
 	// Split options
@@ -252,25 +260,41 @@ void dm::ExportDialog::buttonClicked(Button * button)
 	{
 		export_yolov5_format = false;
 		export_coco_format = false;
+		export_dfine_format = false;
 		btn_darknet_yolo.setToggleState(true, NotificationType::dontSendNotification);
 		btn_yolov5.setToggleState(false, NotificationType::dontSendNotification);
 		btn_coco.setToggleState(false, NotificationType::dontSendNotification);
+		btn_dfine.setToggleState(false, NotificationType::dontSendNotification);
 	}
 	else if (button == &btn_yolov5)
 	{
 		export_yolov5_format = true;
 		export_coco_format = false;
+		export_dfine_format = false;
 		btn_yolov5.setToggleState(true, NotificationType::dontSendNotification);
 		btn_darknet_yolo.setToggleState(false, NotificationType::dontSendNotification);
 		btn_coco.setToggleState(false, NotificationType::dontSendNotification);
+		btn_dfine.setToggleState(false, NotificationType::dontSendNotification);
 	}
 	else if (button == &btn_coco)
 	{
 		export_yolov5_format = false;
 		export_coco_format = true;
+		export_dfine_format = false;
 		btn_coco.setToggleState(true, NotificationType::dontSendNotification);
 		btn_darknet_yolo.setToggleState(false, NotificationType::dontSendNotification);
 		btn_yolov5.setToggleState(false, NotificationType::dontSendNotification);
+		btn_dfine.setToggleState(false, NotificationType::dontSendNotification);
+	}
+	else if (button == &btn_dfine)
+	{
+		export_yolov5_format = false;
+		export_coco_format = false;
+		export_dfine_format = true;
+		btn_dfine.setToggleState(true, NotificationType::dontSendNotification);
+		btn_darknet_yolo.setToggleState(false, NotificationType::dontSendNotification);
+		btn_yolov5.setToggleState(false, NotificationType::dontSendNotification);
+		btn_coco.setToggleState(false, NotificationType::dontSendNotification);
 	}
 	else if (button == &ok_button)
 	{
@@ -302,6 +326,7 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	export_all_images		(false),
 	export_yolov5_format	(false),
 	export_coco_format		(false),
+	export_dfine_format		(false),
 	names_file_rewritten	(false),
 	number_of_annotations_deleted(0),
 	number_of_annotations_remapped(0),
@@ -1085,6 +1110,10 @@ void dm::ClassIdWnd::run()
 		else if (export_coco_format)
 		{
 			run_export_coco();
+		}
+		else if (export_dfine_format)
+		{
+			run_export_dfine();
 		}
 		else
 		{
@@ -1964,6 +1993,254 @@ void dm::ClassIdWnd::run_export_coco()
 }
 
 
+void dm::ClassIdWnd::run_export_dfine()
+{
+	/* D-FINE format creates a flat directory structure:
+	 *
+	 *		project_dfine_export_YYYY-MM-DD_HH-MM-SS/
+	 *		├── images/         <- All images flattened here
+	 *		│   ├── img001.jpg
+	 *		│   ├── img002.jpg
+	 *		│   └── ...
+	 *		├── labels/         <- All labels flattened here
+	 *		│   ├── img001.txt
+	 *		│   ├── img002.txt
+	 *		│   └── ...
+	 *		├── train.csv       <- List of training image filenames
+	 *		├── val.csv         <- List of validation image filenames
+	 *		└── classes.txt     <- Class names
+	 */
+
+	const std::filesystem::path source = dir.getFullPathName().toStdString();
+	std::string export_suffix = "_dfine_export_";
+	if (export_with_split)
+	{
+		export_suffix = "_dfine_export_split_";
+	}
+	const std::filesystem::path target = (source.string() + export_suffix + Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S").toStdString());
+	export_directory = target;
+
+	Log("D-FINE export dataset src=" + source.string());
+	Log("D-FINE export dataset dst=" + target.string());
+
+	setStatusMessage("Exporting files to D-FINE format: " + target.string() + "...");
+
+	// Create directories
+	std::filesystem::path images_dir = target / "images";
+	std::filesystem::path labels_dir = target / "labels";
+
+	std::filesystem::create_directories(images_dir);
+	std::filesystem::create_directories(labels_dir);
+
+	// Read class names from .names file
+	std::vector<std::string> class_names;
+	{
+		std::ifstream names_ifs(names_fn);
+		std::string line;
+		while (std::getline(names_ifs, line))
+		{
+			if (!line.empty())
+			{
+				class_names.push_back(line);
+			}
+		}
+	}
+
+	// Build map of all label files for quick lookup
+	std::map<std::string, std::filesystem::path> label_map;
+	for (const auto& image_path : all_images)
+	{
+		std::filesystem::path txt_path = std::filesystem::path(image_path).replace_extension(".txt");
+		if (std::filesystem::exists(txt_path) && std::filesystem::file_size(txt_path) > 0)
+		{
+			std::string key = std::filesystem::path(image_path).stem().string();
+			label_map[key] = txt_path;
+		}
+	}
+
+	// Build list of all valid images
+	std::vector<std::pair<std::string, std::filesystem::path>> all_valid_images;
+	for (const auto& image_path : all_images)
+	{
+		std::string key = std::filesystem::path(image_path).stem().string();
+		if (export_all_images || label_map.count(key))
+		{
+			all_valid_images.push_back({key, image_path});
+		}
+	}
+
+	// Split images into train and val sets
+	std::vector<std::pair<std::string, std::filesystem::path>> train_images;
+	std::vector<std::pair<std::string, std::filesystem::path>> val_images;
+	std::optional<int> actual_seed_used = export_seed;
+
+	if (export_with_split)
+	{
+		// Shuffle and split based on train_percentage
+		std::default_random_engine g;
+		if (export_seed.has_value())
+		{
+			g.seed(*export_seed);
+			Log("Using deterministic seed " + std::to_string(*export_seed) + " for D-FINE export split");
+		}
+		else
+		{
+			std::random_device rd;
+			int random_seed = rd();
+			g.seed(random_seed);
+			actual_seed_used = random_seed;
+			Log("Using random seed " + std::to_string(random_seed) + " for D-FINE export split");
+		}
+
+		std::shuffle(all_valid_images.begin(), all_valid_images.end(), g);
+
+		size_t train_count = static_cast<size_t>(std::round(all_valid_images.size() * train_percentage / 100.0));
+		for (size_t i = 0; i < all_valid_images.size(); i++)
+		{
+			if (i < train_count)
+			{
+				train_images.push_back(all_valid_images[i]);
+			}
+			else
+			{
+				val_images.push_back(all_valid_images[i]);
+			}
+		}
+
+		Log("D-FINE split: " + std::to_string(train_images.size()) + " train, " + std::to_string(val_images.size()) + " val");
+	}
+	else
+	{
+		// Use path-based detection (existing behavior)
+		for (const auto& [key, image_path] : all_valid_images)
+		{
+			std::string path_str = image_path.string();
+			if (path_str.find("val") != std::string::npos || path_str.find("valid") != std::string::npos)
+			{
+				val_images.push_back({key, image_path});
+			}
+			else
+			{
+				train_images.push_back({key, image_path});
+			}
+		}
+	}
+
+	double work_completed = 0.0f;
+	const double work_to_be_done = train_images.size() + val_images.size();
+
+	// CSV entries
+	std::vector<std::string> train_csv_entries;
+	std::vector<std::string> val_csv_entries;
+
+	// Process training images
+	setStatusMessage("Exporting training images...");
+	for (const auto& [key, image_path] : train_images)
+	{
+		if (threadShouldExit())
+		{
+			return;
+		}
+
+		work_completed++;
+		setProgress(work_completed / work_to_be_done);
+
+		std::string unique_name = generate_unique_filename(image_path, source);
+		std::filesystem::path src_ext = std::filesystem::path(image_path).extension();
+		std::string output_image_name = unique_name + src_ext.string();
+		std::string output_label_name = unique_name + ".txt";
+
+		// Copy image
+		std::filesystem::copy_file(image_path, images_dir / output_image_name, std::filesystem::copy_options::overwrite_existing);
+		number_of_files_copied++;
+
+		// Copy label if exists
+		if (label_map.count(key))
+		{
+			std::filesystem::copy_file(label_map[key], labels_dir / output_label_name, std::filesystem::copy_options::overwrite_existing);
+		}
+		else
+		{
+			// Create empty label file for negative samples
+			std::ofstream ofs(labels_dir / output_label_name);
+			ofs.close();
+		}
+
+		train_csv_entries.push_back(output_image_name);
+	}
+
+	// Process validation images
+	setStatusMessage("Exporting validation images...");
+	for (const auto& [key, image_path] : val_images)
+	{
+		if (threadShouldExit())
+		{
+			return;
+		}
+
+		work_completed++;
+		setProgress(work_completed / work_to_be_done);
+
+		std::string unique_name = generate_unique_filename(image_path, source);
+		std::filesystem::path src_ext = std::filesystem::path(image_path).extension();
+		std::string output_image_name = unique_name + src_ext.string();
+		std::string output_label_name = unique_name + ".txt";
+
+		// Copy image
+		std::filesystem::copy_file(image_path, images_dir / output_image_name, std::filesystem::copy_options::overwrite_existing);
+		number_of_files_copied++;
+
+		// Copy label if exists
+		if (label_map.count(key))
+		{
+			std::filesystem::copy_file(label_map[key], labels_dir / output_label_name, std::filesystem::copy_options::overwrite_existing);
+		}
+		else
+		{
+			// Create empty label file for negative samples
+			std::ofstream ofs(labels_dir / output_label_name);
+			ofs.close();
+		}
+
+		val_csv_entries.push_back(output_image_name);
+	}
+
+	// Write train.csv
+	{
+		std::ofstream ofs(target / "train.csv");
+		for (const auto& entry : train_csv_entries)
+		{
+			ofs << entry << "\n";
+		}
+		Log("Generated train.csv with " + std::to_string(train_csv_entries.size()) + " entries");
+	}
+
+	// Write val.csv
+	{
+		std::ofstream ofs(target / "val.csv");
+		for (const auto& entry : val_csv_entries)
+		{
+			ofs << entry << "\n";
+		}
+		Log("Generated val.csv with " + std::to_string(val_csv_entries.size()) + " entries");
+	}
+
+	// Write classes.txt
+	{
+		std::ofstream ofs(target / "classes.txt");
+		for (const auto& name : class_names)
+		{
+			ofs << name << "\n";
+		}
+		Log("Generated classes.txt with " + std::to_string(class_names.size()) + " classes");
+	}
+
+	Log("D-FINE export complete: " + std::to_string(train_csv_entries.size()) + " train, " + std::to_string(val_csv_entries.size()) + " val images");
+
+	return;
+}
+
+
 void dm::ClassIdWnd::generate_coco_json(const std::vector<std::pair<std::string, std::filesystem::path>>& images, 
 										const std::map<std::string, std::filesystem::path>& label_map,
 										const std::vector<std::string>& class_names,
@@ -2242,6 +2519,7 @@ void dm::ClassIdWnd::exportDialogFinished(bool wasOkPressed, const ExportDialog*
 		export_all_images = dialog->getExportAllImages();
 		export_yolov5_format = dialog->getExportYolov5Format();
 		export_coco_format = dialog->getExportCocoFormat();
+		export_dfine_format = dialog->getExportDfineFormat();
 		export_with_split = dialog->getExportWithSplit();
 		
 		if (export_with_split)

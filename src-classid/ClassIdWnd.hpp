@@ -30,6 +30,7 @@ namespace dm
 			bool getExportAllImages() const { return export_all_images; }
 			bool getExportYolov5Format() const { return export_yolov5_format; }
 			bool getExportCocoFormat() const { return export_coco_format; }
+			bool getExportDfineFormat() const { return export_dfine_format; }
 			bool getExportWithSplit() const { return cb_enable_split.getToggleState(); }
 			double getTrainPercentage() const { return sl_train_percentage.getValue(); }
 			int getSeed() const { return static_cast<int>(txt_seed.getText().getIntValue()); }
@@ -54,6 +55,7 @@ namespace dm
 			TextButton btn_darknet_yolo;
 			TextButton btn_yolov5;
 			TextButton btn_coco;
+			TextButton btn_dfine;
 			
 			// Split options
 			ToggleButton cb_enable_split;
@@ -71,6 +73,7 @@ namespace dm
 			bool export_all_images;
 			bool export_yolov5_format;
 			bool export_coco_format;
+			bool export_dfine_format;
 	};
 
 	class ClassIdWnd : public DocumentWindow, public Button::Listener, public ThreadWithProgressWindow, public TableListBoxModel, public ExportDialog::Callback
@@ -126,6 +129,7 @@ namespace dm
 			void run_export();
 			void run_export_yolov5();
 			void run_export_coco();
+			void run_export_dfine();
 			std::string generate_unique_filename(const std::filesystem::path& image_path, const std::filesystem::path& source);
 			void generate_dataset_yaml(const std::filesystem::path & output_folder, bool with_split = false, double train_percentage = 80.0, const std::optional<int>& seed = std::nullopt);
 			void generate_coco_json(const std::vector<std::pair<std::string, std::filesystem::path>>& images, 
@@ -196,6 +200,7 @@ namespace dm
 			bool export_all_images;
 			bool export_yolov5_format;
 			bool export_coco_format;
+			bool export_dfine_format;
 			bool names_file_rewritten;
 			size_t number_of_annotations_deleted;
 			size_t number_of_annotations_remapped;
