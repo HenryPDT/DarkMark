@@ -47,6 +47,7 @@ ADD_SUBDIRECTORY ( src-wnd		)
 ADD_SUBDIRECTORY ( src-onnx	)
 ADD_SUBDIRECTORY ( src-main		)
 ADD_SUBDIRECTORY ( src-dox		)
+ADD_SUBDIRECTORY ( src-find-dup	)
 
 IF (UNIX AND NOT APPLE)
 	ADD_SUBDIRECTORY ( src-ubuntu	)

@@ -1178,6 +1178,7 @@ void dm::ClassIdWnd::run()
 
 			bool modified = false;
 			std::ifstream ifs(txt_filename.getFullPathName().toStdString());
+			ifs.imbue(std::locale("C"));
 			while (not threadShouldExit())
 			{
 				annotation a;
@@ -1721,6 +1722,7 @@ void dm::ClassIdWnd::count_images_and_marks()
 
 				size_t line_number = 0;
 				std::ifstream ifs(file.getFullPathName().toStdString());
+				ifs.imbue(std::locale("C"));
 				while (not threadShouldExit())
 				{
 					int class_id = -1;

@@ -28,17 +28,6 @@ void DarkMark_CPlusPlus_Terminate_Handler(void)
 }
 
 
-#if 0
-// std::set_unexpected() was removed in C++17
-void DarkMark_CPlusPlus_Unexpected_Handler(void)
-{
-	dm::Log("unexpected handler invoked");
-
-	exit(3);
-}
-#endif
-
-
 dm::DarkMarkApplication::DarkMarkApplication(void)
 {
 	return;
@@ -247,13 +236,19 @@ void dm::DarkMarkApplication::initialise(const String & commandLine)
 	// This method is where you should put your application's initialisation code.
 
 	std::set_terminate(DarkMark_CPlusPlus_Terminate_Handler);
-#ifndef WIN32
-	// set_unexpected() was removed in C++17
-//	std::set_unexpected(DarkMark_CPlusPlus_Unexpected_Handler);
-#endif
+
 	SystemStats::setApplicationCrashHandler(DarkMark_Juce_Crash_Handler);
 
 	setup_signal_handling();
+
+	/* Some European locales use comma instead of period in the formatting of floats:
+	 *
+	 *		0,123 vs 0.123
+	 *
+	 * so force the locale to use the standard "C" locale and (hopefully!) avoid any parsing issues.
+	 */
+	setlocale(LC_ALL, "C");
+	std::setlocale(LC_ALL, "C");
 
 	dm::Log("starting DarkMark v" DARKMARK_VERSION);
 
