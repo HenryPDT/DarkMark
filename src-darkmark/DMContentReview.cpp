@@ -317,15 +317,16 @@ void dm::DMContentReview::run()
 	}
 
 	// Hand off all UI work to the JUCE message thread
-	DMContent* contentPtr = &content; // avoid capturing *this*
 	MessageManager::callAsync(
-		[contentPtr, m = std::move(m), md5s = std::move(md5s)]() mutable
+		[safe_content = juce::Component::SafePointer<dm::DMContent>(&content), m = std::move(m), md5s = std::move(md5s)]() mutable
         {
+			if (safe_content == nullptr) return;
+
 			auto & app = dmapp();
 
 			if (!app.review_wnd)
 			{
-				app.review_wnd.reset(new DMReviewWnd(*contentPtr));
+				app.review_wnd.reset(new DMReviewWnd(*safe_content));
 				// start with JUCE 7, setting the always-on-top flag before the window has been fully created and displayed
 				// app.review_wnd->setAlwaysOnTop(true);
 			}

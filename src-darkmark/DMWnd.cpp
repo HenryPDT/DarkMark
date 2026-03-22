@@ -45,7 +45,7 @@ dm::DMWnd::DMWnd(const std::string & prefix) :
 			setResizeLimits(r.getWidth() / 4, r.getHeight() / 4, 999999, 999999);
 		}
 
-		setFullScreen(true);
+		centreWithSize(1280, 720);
 		setVisible(true);
 	}
 
@@ -99,17 +99,22 @@ dm::DMWnd::~DMWnd(void)
 void dm::DMWnd::closeButtonPressed(void)
 {
 	setVisible(false);
-	dmapp().wnd.reset(nullptr);
 
-	if (dmapp().cli_options.count("project_key"))
+	juce::MessageManager::callAsync([]()
 	{
-		// if we were told to load a specific project, then don't restart the launcher
-		dmapp().systemRequestedQuit();
-	}
-	else
-	{
-		dmapp().startup_wnd.reset(new StartupWnd);
-	}
+		if (dmapp().cli_options.count("project_key"))
+		{
+			// if we were told to load a specific project, then don't restart the launcher
+			dmapp().systemRequestedQuit();
+		}
+		else
+		{
+			dmapp().startup_wnd.reset(new StartupWnd);
+			dmapp().startup_wnd->toFront(true);
+		}
+		
+		dmapp().wnd.reset(nullptr);
+	});
 
 	return;
 }

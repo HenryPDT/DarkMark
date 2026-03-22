@@ -140,8 +140,14 @@ void dm::ScrollField::run()
 	}
 
 	need_to_rebuild_cache_image = true;
-	repaint();
-	content.resized();
+	juce::MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::ScrollField>(this)]
+	{
+		if (safe_this != nullptr)
+		{
+			safe_this->repaint();
+			safe_this->content.resized();
+		}
+	});
 
 	return;
 }

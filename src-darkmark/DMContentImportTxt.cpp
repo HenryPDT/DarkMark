@@ -26,7 +26,13 @@ void dm::DMContentImportTxt::run()
 	if (previous_scrollfield_width > 0)
 	{
 		content.scrollfield_width = 0;
-		content.resized();
+		juce::MessageManager::callAsync([safe_content = juce::Component::SafePointer<dm::DMContent>(&content)]()
+		{
+			if (safe_content != nullptr)
+			{
+				safe_content->resized();
+			}
+		});
 	}
 
 	double max_work = image_filenames.size();
@@ -85,8 +91,14 @@ void dm::DMContentImportTxt::run()
 
 	content.scrollfield_width = previous_scrollfield_width;
 	content.show_predictions = previous_predictions;
-	content.load_image(0);
-	content.scrollfield.rebuild_entire_field_on_thread();
+	juce::MessageManager::callAsync([safe_content = juce::Component::SafePointer<dm::DMContent>(&content)]()
+	{
+		if (safe_content != nullptr)
+		{
+			safe_content->load_image(0);
+			safe_content->scrollfield.rebuild_entire_field_on_thread();
+		}
+	});
 
 	return;
 }

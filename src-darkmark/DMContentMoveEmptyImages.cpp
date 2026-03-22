@@ -25,12 +25,18 @@ void dm::DMContentMoveEmptyImages::run()
 	if (previous_scrollfield_width > 0)
 	{
 		content.scrollfield_width = 0;
-		content.resized();
+		juce::MessageManager::callAsync([safe_content = juce::Component::SafePointer<dm::DMContent>(&content)]()
+		{
+			if (safe_content != nullptr)
+			{
+				safe_content->resized();
+			}
+		});
 	}
 
 	// disable all predictions
-//	const auto previous_predictions = content.show_predictions;
-//	content.show_predictions = EToggle::kOff;
+	const auto previous_predictions = content.show_predictions;
+	content.show_predictions = EToggle::kOff;
 
 	File dir = File(content.project_info.project_dir).getChildFile("empty_images");
 	dir.createDirectory();
@@ -78,7 +84,15 @@ void dm::DMContentMoveEmptyImages::run()
 	}
 
 	content.scrollfield_width = previous_scrollfield_width;
-	content.scrollfield.rebuild_entire_field_on_thread();
+	content.show_predictions = previous_predictions;
+	juce::MessageManager::callAsync([safe_content = juce::Component::SafePointer<dm::DMContent>(&content)]()
+	{
+		if (safe_content != nullptr)
+		{
+			safe_content->load_image(0);
+			safe_content->scrollfield.rebuild_entire_field_on_thread();
+		}
+	});
 
 	return;
 }

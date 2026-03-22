@@ -122,9 +122,11 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	repaint();
 	
 	// Add a small delay to ensure the window is properly initialized
-	MessageManager::callAsync([this]() {
-		repaint();
-		toFront(true);
+	MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::ExportDialog>(this)]() {
+		if (safe_this != nullptr) {
+			safe_this->repaint();
+			safe_this->toFront(true);
+		}
 	});
 }
 
@@ -415,9 +417,11 @@ dm::ClassIdWnd::ClassIdWnd(File project_dir, const std::string & fn) :
 	repaint();
 	
 	// Add a small delay to ensure the window is properly initialized
-	MessageManager::callAsync([this]() {
-		repaint();
-		toFront(true);
+	MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::ClassIdWnd>(this)]() {
+		if (safe_this != nullptr) {
+			safe_this->repaint();
+			safe_this->toFront(true);
+		}
 	});
 
 	return;

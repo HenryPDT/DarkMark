@@ -169,16 +169,17 @@ void dm::DMContentStatistics::run()
 		}
 	}
 
-	DMContent* contentPtr = &content;
 	MessageManager::callAsync(
-		[m = std::move(m), contentPtr]()
+		[m = std::move(m), safe_content = juce::Component::SafePointer<dm::DMContent>(&content)]()
 		mutable
 		{
+			if (safe_content == nullptr) return;
+
 			auto & app = dmapp();
 
 			if (!app.stats_wnd)
 			{
-				app.stats_wnd.reset(new DMStatsWnd(*contentPtr));
+				app.stats_wnd.reset(new DMStatsWnd(*safe_content));
 			}
 
 			app.stats_wnd->m.swap(m);

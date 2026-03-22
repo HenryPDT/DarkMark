@@ -320,7 +320,13 @@ void dm::DMContentFlipImages::run()
 	if (previous_scrollfield_width > 0)
 	{
 		content.scrollfield_width = 0;
-		content.resized();
+		juce::MessageManager::callAsync([safe_content = juce::Component::SafePointer<dm::DMContent>(&content)]()
+		{
+			if (safe_content != nullptr)
+			{
+				safe_content->resized();
+			}
+		});
 	}
 
 	// briefly pause here so the window can properly redraw itself (hack?)
@@ -570,9 +576,14 @@ void dm::DMContentFlipImages::run()
 	setStatusMessage("Sorting...");
 	content.scrollfield_width = previous_scrollfield_width;
 	content.show_predictions = previous_predictions;
-	content.set_sort_order(ESort::kAlphabetical);
-	setStatusMessage("Loading...");
-	content.load_image(0);
+	juce::MessageManager::callAsync([safe_content = juce::Component::SafePointer<dm::DMContent>(&content)]()
+	{
+		if (safe_content != nullptr)
+		{
+			safe_content->load_image(0);
+			safe_content->scrollfield.rebuild_entire_field_on_thread();
+		}
+	});
 
 	if (threadShouldExit() == false)
 	{

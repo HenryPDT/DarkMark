@@ -484,13 +484,19 @@ void dm::DMContent::paintOverChildren(Graphics & g)
 
 void dm::DMContent::rebuild_image_and_repaint()
 {
-	canvas.need_to_rebuild_cache_image = true;
-	canvas.repaint();
-
-	if (scrollfield_width > 0)
+	juce::MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::DMContent>(this)]
 	{
-		scrollfield.draw_marker_at_current_image();
-	}
+		if (safe_this != nullptr)
+		{
+			safe_this->canvas.need_to_rebuild_cache_image = true;
+			safe_this->canvas.repaint();
+
+			if (safe_this->scrollfield_width > 0)
+			{
+				safe_this->scrollfield.draw_marker_at_current_image();
+			}
+		}
+	});
 
 	return;
 }
@@ -603,12 +609,18 @@ dm::DMContent & dm::DMContent::set_sort_order(const dm::ESort new_sort_order)
 			}
 		}
 	}
-	load_image(idx);
-
-	if (scrollfield_width > 0)
+	juce::MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::DMContent>(this), idx]
 	{
-		scrollfield.rebuild_entire_field_on_thread();
-	}
+		if (safe_this != nullptr)
+		{
+			safe_this->load_image(idx);
+
+			if (safe_this->scrollfield_width > 0)
+			{
+				safe_this->scrollfield.rebuild_entire_field_on_thread();
+			}
+		}
+	});
 
 	return *this;
 }
@@ -796,8 +808,14 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 
 	if (dmapp().jump_wnd)
 	{
-		Slider & slider = dmapp().jump_wnd->slider;
-		slider.setValue(image_filename_index + 1);
+		auto index = image_filename_index;
+		juce::MessageManager::callAsync([index]
+		{
+			if (dmapp().jump_wnd)
+			{
+				dmapp().jump_wnd->slider.setValue(index + 1);
+			}
+		});
 	}
 
 	bool exception_caught = false;
