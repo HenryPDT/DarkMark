@@ -527,7 +527,10 @@ void dm::ClassIdWnd::closeButtonPressed()
 		}
 	}
 
-	dmapp().class_id_wnd.reset(nullptr);
+	juce::MessageManager::callAsync([]()
+	{
+		dmapp().class_id_wnd.reset(nullptr);
+	});
 
 	return;
 }
@@ -1698,7 +1701,9 @@ void dm::ClassIdWnd::count_images_and_marks()
 
 		int previous_percentage = -1;
 		const auto export_button_text = export_button.getButtonText();
-		export_button.setButtonText("Verifying...");
+		MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::ClassIdWnd>(this)]() {
+			if (safe_this != nullptr) safe_this->export_button.setButtonText("Verifying...");
+		});
 
 		find_files(dir, image_filenames, ignored_filenames, ignored_filenames, done);
 		ignored_filenames.clear();
@@ -1713,7 +1718,9 @@ void dm::ClassIdWnd::count_images_and_marks()
 				const int percentage = std::round(idx * 100.0f / image_filenames.size());
 				if (percentage != previous_percentage)
 				{
-					export_button.setButtonText("Verifying " + std::to_string(percentage) + "% ...");
+					MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::ClassIdWnd>(this), percentage]() {
+						if (safe_this != nullptr) safe_this->export_button.setButtonText("Verifying " + std::to_string(percentage) + "% ...");
+					});
 					previous_percentage = percentage;
 				}
 			}
@@ -1794,20 +1801,25 @@ void dm::ClassIdWnd::count_images_and_marks()
 			dm::Log("-> class #" + std::to_string(k) + ": " + std::to_string(v) + " total annotations");
 		}
 
-		export_button.setButtonText(export_button_text);
+		MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::ClassIdWnd>(this), export_button_text, error_count_local = (int)error_count, image_filenames_local = std::move(image_filenames)]() mutable {
+			if (safe_this != nullptr)
+			{
+				safe_this->export_button.setButtonText(export_button_text);
 
-		if (error_count)
-		{
-			dm::Log("-> errors found: " + std::to_string(error_count));
-			export_button.setTooltip("Cannot export dataset due to errors.  See log file for details.");
-			apply_button.setTooltip("Cannot apply changes due to errors.  See log file for details.");
-		}
-		else
-		{
-			all_images.swap(image_filenames);
-			done_looking_for_images = true;
-			rebuild_table();
-		}
+				if (error_count_local)
+				{
+					dm::Log("-> errors found: " + std::to_string(error_count_local));
+					safe_this->export_button.setTooltip("Cannot export dataset due to errors.  See log file for details.");
+					safe_this->apply_button.setTooltip("Cannot apply changes due to errors.  See log file for details.");
+				}
+				else
+				{
+					safe_this->all_images.swap(image_filenames_local);
+					safe_this->done_looking_for_images = true;
+					safe_this->rebuild_table();
+				}
+			}
+		});
 	}
 	catch(const std::exception & e)
 	{

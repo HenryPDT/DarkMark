@@ -143,13 +143,9 @@ dm::StartupWnd::StartupWnd() :
 			centreWithSize(800, 600);
 		}
 
-#if JUCE_MAC
-		// fullscreen=true causes an issue when AlertWindow appears underneath the Launcher window
-		// and the entire UI becomes blocked on mac
+		// fullscreen=true causes an issue when other windows (like AlertWindow or ClassIdWnd)
+		// appear underneath the Launcher window and the entire UI becomes blocked
 		setFullScreen(false);
-#else
-		setFullScreen(true);
-#endif
 
 		setVisible(true);
 	}
@@ -265,9 +261,12 @@ void dm::StartupWnd::buttonClicked(Button * button)
 
 				setEnabled(false); // these will be re-enabled when the ClassIdWnd is destroyed
 
-				dmapp().class_id_wnd.reset(new ClassIdWnd(dir, fn.toStdString()));
-				dmapp().class_id_wnd->setVisible(true);
-				dmapp().class_id_wnd->toFront(true);
+				juce::MessageManager::callAsync([dir, fn_str = fn.toStdString()]()
+				{
+					dmapp().class_id_wnd.reset(new ClassIdWnd(dir, fn_str));
+					dmapp().class_id_wnd->setVisible(true);
+					dmapp().class_id_wnd->toFront(true);
+				});
 			}
 		}
 	}
