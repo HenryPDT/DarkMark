@@ -70,6 +70,8 @@ namespace dm
 			Slider			sl_maximum;
 			ToggleButton	tb_extract_percentage;
 			Slider			sl_percentage;
+			ToggleButton	tb_extract_every_nth;
+			Slider			sl_every_nth;
 			ToggleButton	tb_do_not_resize;
 			ToggleButton	tb_resize;
 			TextEditor		ef_width;

@@ -37,6 +37,8 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	sl_maximum				(Slider::SliderStyle::LinearHorizontal, Slider::TextEntryBoxPosition::TextBoxRight),
 	tb_extract_percentage	("percentage of random frames to extract:"		),
 	sl_percentage			(Slider::SliderStyle::LinearHorizontal, Slider::TextEntryBoxPosition::TextBoxRight),
+	tb_extract_every_nth	("extract every Nth frame:"						),
+	sl_every_nth			(Slider::SliderStyle::LinearHorizontal, Slider::TextEntryBoxPosition::TextBoxRight),
 	tb_do_not_resize		("do not resize frames"							),
 	tb_resize				("resize frames:"								),
 	txt_x					("", "x"										),
@@ -87,6 +89,8 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	canvas.addAndMakeVisible(sl_maximum				);
 	canvas.addAndMakeVisible(tb_extract_percentage	);
 	canvas.addAndMakeVisible(sl_percentage			);
+	canvas.addAndMakeVisible(tb_extract_every_nth	);
+	canvas.addAndMakeVisible(sl_every_nth			);
 	canvas.addAndMakeVisible(tb_do_not_resize		);
 	canvas.addAndMakeVisible(tb_resize				);
 	canvas.addAndMakeVisible(ef_width				);
@@ -133,6 +137,7 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	tb_extract_sequences	.setRadioGroupId(1);
 	tb_extract_maximum		.setRadioGroupId(1);
 	tb_extract_percentage	.setRadioGroupId(1);
+	tb_extract_every_nth	.setRadioGroupId(1);
 
 	tb_do_not_resize		.setRadioGroupId(2);
 	tb_resize				.setRadioGroupId(2);
@@ -154,6 +159,7 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	tb_extract_sequences	.addListener(this);
 	tb_extract_maximum		.addListener(this);
 	tb_extract_percentage	.addListener(this);
+	tb_extract_every_nth	.addListener(this);
 	tb_do_not_resize		.addListener(this);
 	tb_resize				.addListener(this);
 	tb_keep_aspect_ratio	.addListener(this);
@@ -198,6 +204,10 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	sl_percentage			.setRange(1.0, 99.0, 1.0);
 	sl_percentage			.setNumDecimalPlacesToDisplay(0);
 	sl_percentage			.setValue(25.0);
+
+	sl_every_nth			.setRange(2.0, 1000.0, 1.0);
+	sl_every_nth			.setNumDecimalPlacesToDisplay(0);
+	sl_every_nth			.setValue(2.0);
 
 	sl_jpeg_quality			.setRange(30.0, 99.0, 1.0);
 	sl_jpeg_quality			.setNumDecimalPlacesToDisplay(0);
@@ -419,6 +429,8 @@ void dm::VideoImportWindow::resized()
 	fb_rows.items.add(FlexItem(sl_maximum				).withHeight(height).withMaxWidth(150.0f).withMargin(left_indent));
 	fb_rows.items.add(FlexItem(tb_extract_percentage	).withHeight(height));
 	fb_rows.items.add(FlexItem(sl_percentage			).withHeight(height).withMaxWidth(150.0f).withMargin(left_indent));
+	fb_rows.items.add(FlexItem(tb_extract_every_nth		).withHeight(height));
+	fb_rows.items.add(FlexItem(sl_every_nth				).withHeight(height).withMaxWidth(150.0f).withMargin(left_indent));
 	fb_rows.items.add(FlexItem(tb_do_not_resize			).withHeight(height).withMargin(new_row_indent));
 	fb_rows.items.add(FlexItem(tb_resize				).withHeight(height));
 
@@ -563,6 +575,9 @@ void dm::VideoImportWindow::buttonClicked(Button * button)
 
 	b = tb_extract_percentage.getToggleState();
 	sl_percentage.setEnabled(b);
+
+	b = tb_extract_every_nth.getToggleState();
+	sl_every_nth.setEnabled(b);
 
 	b = tb_resize.getToggleState();
 	ef_width.setEnabled(b);
@@ -748,10 +763,12 @@ void dm::VideoImportWindow::run()
 		const bool extract_sequences		= tb_extract_sequences	.getToggleState();
 		const bool extract_maximum_frames	= tb_extract_maximum	.getToggleState();
 		const bool extract_percentage		= tb_extract_percentage	.getToggleState();
+		const bool extract_every_nth		= tb_extract_every_nth	.getToggleState();
 		const double number_of_sequences	= sl_sequences			.getValue();
 		const double consecutive_frames		= sl_consecutive_frames	.getValue();
 		const double maximum_to_extract		= sl_maximum			.getValue();
 		const double percent_to_extract		= sl_percentage			.getValue() / 100.0;
+		const double every_nth_step			= sl_every_nth			.getValue();
 		const bool resize_frame				= tb_resize				.getToggleState();
 		const bool maintain_aspect_ratio	= tb_keep_aspect_ratio	.getToggleState();
 		const int new_width					= std::atoi(ef_width	.getText().toStdString().c_str());
@@ -791,6 +808,11 @@ void dm::VideoImportWindow::run()
 			else if (extract_percentage)
 			{
 				work_to_be_done += number_of_frames * percent_to_extract;
+			}
+			else if (extract_every_nth)
+			{
+				const double step = std::max(1.0, every_nth_step);
+				work_to_be_done += std::ceil(number_of_frames / step);
 			}
 		}
 
@@ -905,6 +927,14 @@ void dm::VideoImportWindow::run()
 					frames_needed.insert(random_frame);
 				}
 			}
+			else if (extract_every_nth)
+			{
+				const size_t step = std::max(size_t(1), size_t(every_nth_step));
+				for (size_t f = 0; f < number_of_frames; f += step)
+				{
+					frames_needed.insert(f);
+				}
+			}
 
 			Log("about to start extracting " + std::to_string(frames_needed.size()) + " frames from " + filename);
 
@@ -920,7 +950,7 @@ void dm::VideoImportWindow::run()
 					break;
 				}
 
-				if (extract_sequences or extract_maximum_frames or extract_percentage)
+				if (extract_sequences or extract_maximum_frames or extract_percentage or extract_every_nth)
 				{
 					if (frames_needed.empty())
 					{
