@@ -532,6 +532,7 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 
 	if (index_to_delete >= 0)
 	{
+		content.push_undo_state();
 		// Check if the mark being deleted was selected for merge
 		mark_was_selected_for_merge = false;
 		mark_original_selection_position = -1;
@@ -608,6 +609,7 @@ void dm::DMCanvas::mouseDoubleClick(const MouseEvent & event)
 		return; // Skip normal mark creation.
 	}
 
+	content.push_undo_state();
 	double x = double(event.x + zoom_image_offset.x) / cached_image.getWidth();
 	double y = double(event.y + zoom_image_offset.y) / cached_image.getHeight();
 
@@ -706,6 +708,10 @@ void dm::DMCanvas::mouseDragFinished(juce::Rectangle<int> drag_rect, const Mouse
 	{
 		class_idx = resized_mark_class_idx;
 		resized_mark_class_idx = -1;
+	}
+	else
+	{
+		content.push_undo_state();
 	}
 	Mark m(	cv::Point2d(midx/image_width, midy/image_height),
 			cv::Size2d(width/image_width, height/image_height),

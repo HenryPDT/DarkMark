@@ -338,5 +338,14 @@ namespace dm
 
 			// Unified zoom setter for both keyboard and mouse scroll
 			void setZoom(double new_zoom_factor, cv::Point zoom_point);
+
+			/// History of marks for Undo operations on the current image
+			std::vector<std::vector<Mark>> undo_stack;
+			/// History of marks for Redo operations on the current image
+			std::vector<std::vector<Mark>> redo_stack;
+
+			void push_undo_state();
+			void undo();
+			void redo();
 	};
 }

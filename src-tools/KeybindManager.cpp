@@ -35,6 +35,8 @@ void dm::KeybindManager::initializeDefaults()
 	keybinds.emplace_back(KeybindAction::DeleteSelectedMark, KeyPress(KeyPress::deleteKey));
 	keybinds.emplace_back(KeybindAction::CopyAnnotations, KeyPress::createFromDescription("ctrl + c"));
 	keybinds.emplace_back(KeybindAction::PasteAnnotations, KeyPress::createFromDescription("ctrl + v"));
+	keybinds.emplace_back(KeybindAction::Undo, KeyPress::createFromDescription("ctrl + z"));
+	keybinds.emplace_back(KeybindAction::Redo, KeyPress::createFromDescription("ctrl + y"));
 
 	// Zoom operations
 	keybinds.emplace_back(KeybindAction::ZoomIn, KeyPress::createFromDescription("+"));
@@ -231,6 +233,8 @@ String dm::KeybindManager::getActionName(KeybindAction action)
 		case KeybindAction::DeleteSelectedMark: return "Delete Selected Mark";
 		case KeybindAction::CopyAnnotations: return "Copy Annotations";
 		case KeybindAction::PasteAnnotations: return "Paste Annotations";
+		case KeybindAction::Undo: return "Undo";
+		case KeybindAction::Redo: return "Redo";
 		case KeybindAction::ZoomIn: return "Zoom In";
 		case KeybindAction::ZoomInLarge: return "Zoom In Large";
 		case KeybindAction::ZoomOut: return "Zoom Out";
@@ -322,6 +326,8 @@ String dm::KeybindManager::getActionDescription(KeybindAction action)
 		case KeybindAction::DeleteSelectedMark: return "Delete currently selected marking";
 		case KeybindAction::CopyAnnotations: return "Copy annotations to clipboard";
 		case KeybindAction::PasteAnnotations: return "Paste annotations from clipboard";
+		case KeybindAction::Undo: return "Undo the last mark operation on the current image";
+		case KeybindAction::Redo: return "Redo the previously undone mark operation";
 		case KeybindAction::ZoomIn: return "Zoom image +10%";
 		case KeybindAction::ZoomInLarge: return "Zoom image 500%";
 		case KeybindAction::ZoomOut: return "Zoom image -10%";

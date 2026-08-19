@@ -29,6 +29,8 @@ namespace dm
 		DeleteSelectedMark,
 		CopyAnnotations,
 		PasteAnnotations,
+		Undo,
+		Redo,
 		
 		// Zoom operations
 		ZoomIn,

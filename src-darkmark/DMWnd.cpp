@@ -34,18 +34,27 @@ dm::DMWnd::DMWnd(const std::string & prefix) :
 			peer->setIcon(DarkMarkLogo());
 		}
 
+		bool restored = false;
 		if (cfg().containsKey("DMWnd"))
 		{
-//			restoreWindowStateFromString( cfg().getValue("DMWnd") );
+			const String state = cfg().getValue("DMWnd");
+			if (state.isNotEmpty())
+			{
+				restored = restoreWindowStateFromString(state);
+				auto r = getParentMonitorArea();
+				setResizeLimits(r.getWidth() / 4, r.getHeight() / 4, 999999, 999999);
 
-			// JUCE v7 still manages to get the size wrong every once in a while,
-			// so set a limit to prevent the window from appearing as a tiny square
-			// just a few pixels in size at the top-left corner of the screen.
-			auto r = getParentMonitorArea();
-			setResizeLimits(r.getWidth() / 4, r.getHeight() / 4, 999999, 999999);
+				if (getWidth() < 640 or getHeight() < 480 or !r.intersects(getBounds()))
+				{
+					centreWithSize(1280, 720);
+				}
+			}
 		}
 
-		centreWithSize(1280, 720);
+		if (!restored)
+		{
+			centreWithSize(1280, 720);
+		}
 		setVisible(true);
 	}
 

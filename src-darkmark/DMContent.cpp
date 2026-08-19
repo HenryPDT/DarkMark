@@ -527,6 +527,7 @@ dm::DMContent & dm::DMContent::set_class(const size_t class_idx)
 		}
 		else
 		{
+			push_undo_state();
 			auto & m = marks[selected_mark];
 			m.class_idx = class_idx;
 			m.name = names.at(m.class_idx);
@@ -540,6 +541,7 @@ dm::DMContent & dm::DMContent::set_class(const size_t class_idx)
 		most_recent_class_idx = class_idx;
 		const auto & opencv_colour = annotation_colours.at(most_recent_class_idx % annotation_colours.size());
 		crosshair_colour = Colour(opencv_colour[2], opencv_colour[1], opencv_colour[0]);
+		show_message("class #" + std::to_string(class_idx) + ": \"" + names.at(class_idx) + "\"");
 		rebuild_image_and_repaint();
 	}
 
@@ -780,6 +782,8 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 	zoom_review_marks_remaining.clear();
 	darknet_image_processing_time = "";
 	selected_mark	= -1;
+	undo_stack.clear();
+	redo_stack.clear();
 	original_image	= cv::Mat();
 	black_and_white_image = cv::Mat();
 	
@@ -1617,6 +1621,7 @@ dm::DMContent & dm::DMContent::accept_current_mark()
 		auto & m = marks.at(selected_mark);
 		if (m.is_prediction)
 		{
+			push_undo_state();
 			m.is_prediction	= false;
 			m.name			= names.at(m.class_idx);
 			m.description	= names.at(m.class_idx);
@@ -1651,6 +1656,7 @@ dm::DMContent & dm::DMContent::accept_all_marks()
 
 		if (ok_to_continue)
 		{
+			push_undo_state();
 			for (auto & m : marks)
 			{
 				m.is_prediction	= false;
@@ -1669,6 +1675,7 @@ dm::DMContent & dm::DMContent::accept_all_marks()
 
 dm::DMContent & dm::DMContent::erase_all_marks()
 {
+	push_undo_state();
 	Log("deleting all marks for " + long_filename);
 
 	marks.clear();
@@ -3043,7 +3050,7 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 			if (user_specified_zoom_factor > 0.0)
 			{
 				// jump out of "zoom" mode before we do anything else
-				handleKeybindAction(KeybindAction::ToggleAutoZoom);
+				// handleKeybindAction(KeybindAction::ToggleAutoZoom);
 			}
 			if (image_filename_index > 0)
 			{
@@ -3289,6 +3296,7 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 		case KeybindAction::DeleteSelectedMark:
 			if (selected_mark >= 0)
 			{
+				push_undo_state();
 				auto iter = marks.begin() + selected_mark;
 				marks.erase(iter);
 				selected_mark = -1;
@@ -3344,6 +3352,10 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 					try
 					{
 						json root = json::parse(str);
+						if (!root["annotations"].empty())
+						{
+							push_undo_state();
+						}
 						for (const auto & j : root["annotations"])
 						{
 							Log(std::to_string(counter) + ": " + j.dump());
@@ -3374,6 +3386,14 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 
 				show_message("pasted " + std::to_string(counter) + " bounding box" + (counter == 1 ? "" : "es"));
 			}
+			return true;
+
+		case KeybindAction::Undo:
+			undo();
+			return true;
+
+		case KeybindAction::Redo:
+			redo();
 			return true;
 			
 		// Zoom operations
@@ -3622,6 +3642,7 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 			return true;
 			
 		case KeybindAction::SnapAnnotations:
+			push_undo_state();
 			if (selected_mark < 0)
 			{
 				size_t count = 0;
@@ -3690,10 +3711,12 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 			return true;
 			
 		case KeybindAction::CopyMarksFromPrevious:
+			push_undo_state();
 			copy_marks_from_previous_image();
 			return true;
 			
 		case KeybindAction::CopyMarksFromNext:
+			push_undo_state();
 			copy_marks_from_next_image();
 			return true;
 			
@@ -3769,4 +3792,53 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 		default:
 			return false;
 	}
+}
+
+
+void dm::DMContent::push_undo_state()
+{
+	undo_stack.push_back(marks);
+	if (undo_stack.size() > 50)
+	{
+		undo_stack.erase(undo_stack.begin());
+	}
+	redo_stack.clear();
+}
+
+
+void dm::DMContent::undo()
+{
+	if (undo_stack.empty())
+	{
+		show_message("nothing to undo");
+		return;
+	}
+	redo_stack.push_back(marks);
+	marks = undo_stack.back();
+	undo_stack.pop_back();
+	selected_mark = -1;
+	selected_marks_for_merge.clear();
+	need_to_save = true;
+	image_is_completely_empty = (marks.empty());
+	show_message("undo (" + std::to_string(marks.size()) + " mark" + (marks.size() == 1 ? "" : "s") + ")");
+	rebuild_image_and_repaint();
+}
+
+
+void dm::DMContent::redo()
+{
+	if (redo_stack.empty())
+	{
+		show_message("nothing to redo");
+		return;
+	}
+	undo_stack.push_back(marks);
+	marks = redo_stack.back();
+	redo_stack.pop_back();
+	selected_mark = -1;
+	selected_marks_for_merge.clear();
+	need_to_save = true;
+	image_is_completely_empty = (marks.empty());
+	show_message("redo (" + std::to_string(marks.size()) + " mark" + (marks.size() == 1 ? "" : "s") + ")");
+	rebuild_image_and_repaint();
 }
