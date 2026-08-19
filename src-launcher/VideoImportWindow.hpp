@@ -42,6 +42,8 @@ namespace dm
 			float nms_threshold;
 			float hierarchy_threshold;
 			bool enable_tiling;
+			int onnx_input_width;
+			int onnx_input_height;
 
 			void update_model_type_ui();
 			void load_selected_model();
@@ -97,6 +99,10 @@ namespace dm
 			TextButton      btn_select_onnx_names;
 			Label           lbl_onnx_model;
 			Label           lbl_onnx_names;
+			Label           txt_onnx_input_size;
+			TextEditor      ef_onnx_width;
+			Label           txt_onnx_x;
+			TextEditor      ef_onnx_height;
 
 			ToggleButton    tb_import_with_detections;
 			ToggleButton    tb_import_without_detections;

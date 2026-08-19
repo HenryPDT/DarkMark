@@ -59,7 +59,7 @@ namespace OnnxHelp
 	class NN
 	{
 		public:
-			NN(const std::string & onnx_filename, const std::vector<std::string>& class_names);
+			NN(const std::string & onnx_filename, const std::vector<std::string>& class_names = {});
 			~NN();
 			PredictionResults predict(const cv::Mat& image, float conf_threshold = 0.3f, float nms_threshold = 0.45f) const;
 			

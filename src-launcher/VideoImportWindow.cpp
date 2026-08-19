@@ -56,6 +56,8 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	btn_select_darknet_names("Select .names file"),
 	btn_select_onnx_model("Select .onnx file"),
 	btn_select_onnx_names("Select .names file"),
+	txt_onnx_input_size("", "ONNX input size:"),
+	txt_onnx_x("", "x"),
 	tb_import_with_detections("Import only frames with detections"),
 	tb_import_without_detections("Import only frames without detections"),
 	tb_import_all_frames("Import all frames regardless of detections"),
@@ -112,6 +114,10 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	canvas.addAndMakeVisible(btn_select_onnx_names);
 	canvas.addAndMakeVisible(lbl_onnx_model);
 	canvas.addAndMakeVisible(lbl_onnx_names);
+	canvas.addAndMakeVisible(txt_onnx_input_size);
+	canvas.addAndMakeVisible(ef_onnx_width);
+	canvas.addAndMakeVisible(txt_onnx_x);
+	canvas.addAndMakeVisible(ef_onnx_height);
 	canvas.addAndMakeVisible(tb_import_with_detections);
 	canvas.addAndMakeVisible(tb_import_without_detections);
 	canvas.addAndMakeVisible(tb_import_all_frames);
@@ -229,6 +235,27 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	ef_height				.setText("480");
 	ef_width				.setJustification(Justification::centred);
 	ef_height				.setJustification(Justification::centred);
+
+	ef_onnx_width			.setInputRestrictions(5, "0123456789");
+	ef_onnx_height			.setInputRestrictions(5, "0123456789");
+	ef_onnx_width			.setText(String(cfg().get_int("video_import_onnx_width", 640)));
+	ef_onnx_height			.setText(String(cfg().get_int("video_import_onnx_height", 640)));
+	ef_onnx_width			.setJustification(Justification::centred);
+	ef_onnx_height			.setJustification(Justification::centred);
+
+	if (!onnx_model_path.empty() && File(onnx_model_path).existsAsFile())
+	{
+		try
+		{
+			OnnxHelp::NN test_nn(onnx_model_path, {});
+			const bool is_dyn = test_nn.is_dynamic();
+			ef_onnx_width.setEnabled(is_dyn);
+			ef_onnx_height.setEnabled(is_dyn);
+		}
+		catch (...)
+		{
+		}
+	}
 
 	std::stringstream ss;
 	try
@@ -459,6 +486,15 @@ void dm::VideoImportWindow::resized()
 	fb_onnx_names.items.add(FlexItem(lbl_onnx_names).withHeight(height).withFlex(1.0f));
 	fb_rows.items.add(FlexItem(fb_onnx_names).withHeight(height).withMargin(left_indent));
 
+	FlexBox fb_onnx_size;
+	fb_onnx_size.flexDirection = FlexBox::Direction::row;
+	fb_onnx_size.justifyContent = FlexBox::JustifyContent::flexStart;
+	fb_onnx_size.items.add(FlexItem(txt_onnx_input_size).withHeight(height).withWidth(150.0f));
+	fb_onnx_size.items.add(FlexItem(ef_onnx_width).withHeight(height).withWidth(60.0f));
+	fb_onnx_size.items.add(FlexItem(txt_onnx_x).withHeight(height).withWidth(20.0f));
+	fb_onnx_size.items.add(FlexItem(ef_onnx_height).withHeight(height).withWidth(60.0f));
+	fb_rows.items.add(FlexItem(fb_onnx_size).withHeight(height).withMargin(left_indent));
+
 	FlexBox fb_confidence;
 	fb_confidence.flexDirection = FlexBox::Direction::row;
 	fb_confidence.justifyContent = FlexBox::JustifyContent::flexStart;
@@ -577,6 +613,23 @@ void dm::VideoImportWindow::buttonClicked(Button * button)
 			onnx_model_path = fc.getResult().getFullPathName().toStdString();
 			lbl_onnx_model.setText(fc.getResult().getFileName(), dontSendNotification);
 			cfg().setValue("video_import_onnx_model", String(onnx_model_path));
+
+			try
+			{
+				OnnxHelp::NN test_nn(onnx_model_path, {});
+				const cv::Size sz = test_nn.get_input_size();
+				const bool is_dyn = test_nn.is_dynamic();
+				if (sz.width > 0 && sz.height > 0)
+				{
+					ef_onnx_width.setText(String(sz.width));
+					ef_onnx_height.setText(String(sz.height));
+				}
+				ef_onnx_width.setEnabled(is_dyn);
+				ef_onnx_height.setEnabled(is_dyn);
+			}
+			catch (...)
+			{
+			}
 		}
 	}
 	else if (button == &btn_select_onnx_names)
@@ -594,6 +647,12 @@ void dm::VideoImportWindow::buttonClicked(Button * button)
 
 	if (button == &ok)
 	{
+		onnx_input_width = ef_onnx_width.getText().getIntValue();
+		onnx_input_height = ef_onnx_height.getText().getIntValue();
+
+		cfg().setValue("video_import_onnx_width", onnx_input_width);
+		cfg().setValue("video_import_onnx_height", onnx_input_height);
+
 		// disable all of the controls and start the frame extraction
 		canvas.setEnabled(false);
 		runThread(); // this waits for the thread to be done
@@ -624,6 +683,10 @@ void dm::VideoImportWindow::update_model_type_ui()
 	btn_select_onnx_names.setVisible(auto_annotation_enabled && onnx_selected);
 	lbl_onnx_model.setVisible(auto_annotation_enabled && onnx_selected);
 	lbl_onnx_names.setVisible(auto_annotation_enabled && onnx_selected);
+	txt_onnx_input_size.setVisible(auto_annotation_enabled && onnx_selected);
+	ef_onnx_width.setVisible(auto_annotation_enabled && onnx_selected);
+	txt_onnx_x.setVisible(auto_annotation_enabled && onnx_selected);
+	ef_onnx_height.setVisible(auto_annotation_enabled && onnx_selected);
 
 	tb_import_with_detections.setVisible(auto_annotation_enabled);
 	tb_import_without_detections.setVisible(auto_annotation_enabled);
@@ -1046,6 +1109,12 @@ void dm::VideoImportWindow::load_onnx_model()
 
 		temp_onnx_nn.reset(new OnnxHelp::NN(onnx_model_path, names));
 		class_names = names;
+
+		if (onnx_input_width > 0 && onnx_input_height > 0)
+		{
+			temp_onnx_nn->set_input_size(cv::Size(onnx_input_width, onnx_input_height));
+			Log("Set custom ONNX input size: " + std::to_string(onnx_input_width) + "x" + std::to_string(onnx_input_height));
+		}
 		
 		// Auto-detect preprocessing mode based on filename
 		std::string lower_filename = onnx_model_path;
