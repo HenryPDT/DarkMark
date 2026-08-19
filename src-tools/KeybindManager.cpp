@@ -16,10 +16,10 @@ void dm::KeybindManager::initializeDefaults()
 {
 	keybinds.clear();
 	// Navigation
-	keybinds.emplace_back(KeybindAction::NavigateLeft, KeyPress(KeyPress::leftKey));
-	keybinds.emplace_back(KeybindAction::NavigateRight, KeyPress(KeyPress::rightKey));
-	keybinds.emplace_back(KeybindAction::NavigateUp, KeyPress(KeyPress::upKey));
-	keybinds.emplace_back(KeybindAction::NavigateDown, KeyPress(KeyPress::downKey));
+	keybinds.emplace_back(KeybindAction::NavigateLeft, KeyPress::createFromDescription("a"));
+	keybinds.emplace_back(KeybindAction::NavigateRight, KeyPress::createFromDescription("d"));
+	keybinds.emplace_back(KeybindAction::NavigateUp, KeyPress::createFromDescription("w"));
+	keybinds.emplace_back(KeybindAction::NavigateDown, KeyPress::createFromDescription("s"));
 	keybinds.emplace_back(KeybindAction::NavigatePageUp, KeyPress(KeyPress::pageUpKey));
 	keybinds.emplace_back(KeybindAction::NavigatePageDown, KeyPress(KeyPress::pageDownKey));
 	keybinds.emplace_back(KeybindAction::NavigateHome, KeyPress(KeyPress::homeKey));
@@ -28,11 +28,11 @@ void dm::KeybindManager::initializeDefaults()
 	keybinds.emplace_back(KeybindAction::NavigatePreviousMark, KeyPress::createFromDescription("shift + tab"));
 
 	// Image operations
-	keybinds.emplace_back(KeybindAction::AcceptAllMarks, KeyPress::createFromDescription("a"));
-	keybinds.emplace_back(KeybindAction::AcceptCurrentMark, KeyPress::createFromDescription("shift + a"));
+	keybinds.emplace_back(KeybindAction::AcceptAllMarks, KeyPress::createFromDescription("q"));
+	keybinds.emplace_back(KeybindAction::AcceptCurrentMark, KeyPress::createFromDescription("shift + q"));
 	keybinds.emplace_back(KeybindAction::EraseAllMarks, KeyPress::createFromDescription("shift + c"));
-	keybinds.emplace_back(KeybindAction::DeleteCurrentImage, KeyPress::createFromDescription("shift + delete"));
-	keybinds.emplace_back(KeybindAction::DeleteSelectedMark, KeyPress(KeyPress::deleteKey));
+	keybinds.emplace_back(KeybindAction::DeleteCurrentImage, KeyPress::createFromDescription("v"));
+	keybinds.emplace_back(KeybindAction::DeleteSelectedMark, KeyPress::createFromDescription("x"));
 	keybinds.emplace_back(KeybindAction::CopyAnnotations, KeyPress::createFromDescription("ctrl + c"));
 	keybinds.emplace_back(KeybindAction::PasteAnnotations, KeyPress::createFromDescription("ctrl + v"));
 	keybinds.emplace_back(KeybindAction::Undo, KeyPress::createFromDescription("ctrl + z"));
@@ -50,10 +50,10 @@ void dm::KeybindManager::initializeDefaults()
 	keybinds.emplace_back(KeybindAction::ToggleShowLabels, KeyPress::createFromDescription("l"));
 	keybinds.emplace_back(KeybindAction::ToggleBoldLabels, KeyPress::createFromDescription("b"));
 	keybinds.emplace_back(KeybindAction::ToggleShadeRectangles, KeyPress::createFromDescription("shift + b"));
-	keybinds.emplace_back(KeybindAction::ToggleBlackAndWhiteMode, KeyPress::createFromDescription("w"));
+	keybinds.emplace_back(KeybindAction::ToggleBlackAndWhiteMode, KeyPress::createFromDescription("shift + w"));
 	keybinds.emplace_back(KeybindAction::ToggleHeatmaps, KeyPress::createFromDescription("shift + h"));
 	keybinds.emplace_back(KeybindAction::CycleHeatmaps, KeyPress::createFromDescription("h"));
-	keybinds.emplace_back(KeybindAction::ToggleSnapping, KeyPress::createFromDescription("shift + d"));
+	keybinds.emplace_back(KeybindAction::ToggleSnapping, KeyPress::createFromDescription("ctrl + d"));
 	keybinds.emplace_back(KeybindAction::ToggleImageTiling, KeyPress::createFromDescription("t"));
 
 	// Sorting
@@ -71,52 +71,52 @@ void dm::KeybindManager::initializeDefaults()
 	keybinds.emplace_back(KeybindAction::ShowJumpWindow, KeyPress::createFromDescription("j"));
 	keybinds.emplace_back(KeybindAction::ShowAbout, KeyPress(KeyPress::F1Key));
 	keybinds.emplace_back(KeybindAction::ZoomAndReview, KeyPress::createFromDescription("z"));
-	keybinds.emplace_back(KeybindAction::SnapAnnotations, KeyPress::createFromDescription("d"));
+	keybinds.emplace_back(KeybindAction::SnapAnnotations, KeyPress::createFromDescription("shift + d"));
 	keybinds.emplace_back(KeybindAction::MarkImageEmpty, KeyPress::createFromDescription("n"));
 	keybinds.emplace_back(KeybindAction::CopyMarksFromPrevious, KeyPress::createFromDescription("y"));
 	keybinds.emplace_back(KeybindAction::CopyMarksFromNext, KeyPress::createFromDescription("shift + y"));
-	keybinds.emplace_back(KeybindAction::SaveScreenshot, KeyPress::createFromDescription("s"));
+	keybinds.emplace_back(KeybindAction::SaveScreenshot, KeyPress::createFromDescription("ctrl + s"));
 	keybinds.emplace_back(KeybindAction::SaveScreenshotFullSize, KeyPress::createFromDescription("shift + s"));
 
 	// Threshold adjustments
 	keybinds.emplace_back(KeybindAction::IncreaseThreshold, KeyPress(KeyPress::upKey));
 	keybinds.emplace_back(KeybindAction::DecreaseThreshold, KeyPress(KeyPress::downKey));
 
-	// Class selection (0-9)
-	keybinds.emplace_back(KeybindAction::SelectClass0, KeyPress::createFromDescription("0"));
-	keybinds.emplace_back(KeybindAction::SelectClass1, KeyPress::createFromDescription("1"));
-	keybinds.emplace_back(KeybindAction::SelectClass2, KeyPress::createFromDescription("2"));
-	keybinds.emplace_back(KeybindAction::SelectClass3, KeyPress::createFromDescription("3"));
-	keybinds.emplace_back(KeybindAction::SelectClass4, KeyPress::createFromDescription("4"));
-	keybinds.emplace_back(KeybindAction::SelectClass5, KeyPress::createFromDescription("5"));
-	keybinds.emplace_back(KeybindAction::SelectClass6, KeyPress::createFromDescription("6"));
-	keybinds.emplace_back(KeybindAction::SelectClass7, KeyPress::createFromDescription("7"));
-	keybinds.emplace_back(KeybindAction::SelectClass8, KeyPress::createFromDescription("8"));
-	keybinds.emplace_back(KeybindAction::SelectClass9, KeyPress::createFromDescription("9"));
+	// Class selection (1-9, 0)
+	keybinds.emplace_back(KeybindAction::SelectClass0, KeyPress::createFromDescription("1"));
+	keybinds.emplace_back(KeybindAction::SelectClass1, KeyPress::createFromDescription("2"));
+	keybinds.emplace_back(KeybindAction::SelectClass2, KeyPress::createFromDescription("3"));
+	keybinds.emplace_back(KeybindAction::SelectClass3, KeyPress::createFromDescription("4"));
+	keybinds.emplace_back(KeybindAction::SelectClass4, KeyPress::createFromDescription("5"));
+	keybinds.emplace_back(KeybindAction::SelectClass5, KeyPress::createFromDescription("6"));
+	keybinds.emplace_back(KeybindAction::SelectClass6, KeyPress::createFromDescription("7"));
+	keybinds.emplace_back(KeybindAction::SelectClass7, KeyPress::createFromDescription("8"));
+	keybinds.emplace_back(KeybindAction::SelectClass8, KeyPress::createFromDescription("9"));
+	keybinds.emplace_back(KeybindAction::SelectClass9, KeyPress::createFromDescription("0"));
 
-	// Class selection (Ctrl+0-9)
-	keybinds.emplace_back(KeybindAction::SelectClass10, KeyPress::createFromDescription("ctrl + 0"));
-	keybinds.emplace_back(KeybindAction::SelectClass11, KeyPress::createFromDescription("ctrl + 1"));
-	keybinds.emplace_back(KeybindAction::SelectClass12, KeyPress::createFromDescription("ctrl + 2"));
-	keybinds.emplace_back(KeybindAction::SelectClass13, KeyPress::createFromDescription("ctrl + 3"));
-	keybinds.emplace_back(KeybindAction::SelectClass14, KeyPress::createFromDescription("ctrl + 4"));
-	keybinds.emplace_back(KeybindAction::SelectClass15, KeyPress::createFromDescription("ctrl + 5"));
-	keybinds.emplace_back(KeybindAction::SelectClass16, KeyPress::createFromDescription("ctrl + 6"));
-	keybinds.emplace_back(KeybindAction::SelectClass17, KeyPress::createFromDescription("ctrl + 7"));
-	keybinds.emplace_back(KeybindAction::SelectClass18, KeyPress::createFromDescription("ctrl + 8"));
-	keybinds.emplace_back(KeybindAction::SelectClass19, KeyPress::createFromDescription("ctrl + 9"));
+	// Class selection (Ctrl+1-9, Ctrl+0)
+	keybinds.emplace_back(KeybindAction::SelectClass10, KeyPress::createFromDescription("ctrl + 1"));
+	keybinds.emplace_back(KeybindAction::SelectClass11, KeyPress::createFromDescription("ctrl + 2"));
+	keybinds.emplace_back(KeybindAction::SelectClass12, KeyPress::createFromDescription("ctrl + 3"));
+	keybinds.emplace_back(KeybindAction::SelectClass13, KeyPress::createFromDescription("ctrl + 4"));
+	keybinds.emplace_back(KeybindAction::SelectClass14, KeyPress::createFromDescription("ctrl + 5"));
+	keybinds.emplace_back(KeybindAction::SelectClass15, KeyPress::createFromDescription("ctrl + 6"));
+	keybinds.emplace_back(KeybindAction::SelectClass16, KeyPress::createFromDescription("ctrl + 7"));
+	keybinds.emplace_back(KeybindAction::SelectClass17, KeyPress::createFromDescription("ctrl + 8"));
+	keybinds.emplace_back(KeybindAction::SelectClass18, KeyPress::createFromDescription("ctrl + 9"));
+	keybinds.emplace_back(KeybindAction::SelectClass19, KeyPress::createFromDescription("ctrl + 0"));
 
-	// Class selection (Alt+0-9)
-	keybinds.emplace_back(KeybindAction::SelectClass20, KeyPress::createFromDescription("alt + 0"));
-	keybinds.emplace_back(KeybindAction::SelectClass21, KeyPress::createFromDescription("alt + 1"));
-	keybinds.emplace_back(KeybindAction::SelectClass22, KeyPress::createFromDescription("alt + 2"));
-	keybinds.emplace_back(KeybindAction::SelectClass23, KeyPress::createFromDescription("alt + 3"));
-	keybinds.emplace_back(KeybindAction::SelectClass24, KeyPress::createFromDescription("alt + 4"));
-	keybinds.emplace_back(KeybindAction::SelectClass25, KeyPress::createFromDescription("alt + 5"));
-	keybinds.emplace_back(KeybindAction::SelectClass26, KeyPress::createFromDescription("alt + 6"));
-	keybinds.emplace_back(KeybindAction::SelectClass27, KeyPress::createFromDescription("alt + 7"));
-	keybinds.emplace_back(KeybindAction::SelectClass28, KeyPress::createFromDescription("alt + 8"));
-	keybinds.emplace_back(KeybindAction::SelectClass29, KeyPress::createFromDescription("alt + 9"));
+	// Class selection (Alt+1-9, Alt+0)
+	keybinds.emplace_back(KeybindAction::SelectClass20, KeyPress::createFromDescription("alt + 1"));
+	keybinds.emplace_back(KeybindAction::SelectClass21, KeyPress::createFromDescription("alt + 2"));
+	keybinds.emplace_back(KeybindAction::SelectClass22, KeyPress::createFromDescription("alt + 3"));
+	keybinds.emplace_back(KeybindAction::SelectClass23, KeyPress::createFromDescription("alt + 4"));
+	keybinds.emplace_back(KeybindAction::SelectClass24, KeyPress::createFromDescription("alt + 5"));
+	keybinds.emplace_back(KeybindAction::SelectClass25, KeyPress::createFromDescription("alt + 6"));
+	keybinds.emplace_back(KeybindAction::SelectClass26, KeyPress::createFromDescription("alt + 7"));
+	keybinds.emplace_back(KeybindAction::SelectClass27, KeyPress::createFromDescription("alt + 8"));
+	keybinds.emplace_back(KeybindAction::SelectClass28, KeyPress::createFromDescription("alt + 9"));
+	keybinds.emplace_back(KeybindAction::SelectClass29, KeyPress::createFromDescription("alt + 0"));
 
 	// Special actions
 	keybinds.emplace_back(KeybindAction::Quit, KeyPress(KeyPress::escapeKey));

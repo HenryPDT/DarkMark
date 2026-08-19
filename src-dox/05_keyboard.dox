@@ -4,19 +4,18 @@
 
 Key							| Saves Modified Marks First	| Description
 ----------------------------|-------------------------------|------------
-@p LEFT						| yes							| Go to previous image.  If at the first image, do nothing.
-@p RIGHT					| yes							| Go to the next image.  If at the last image, do nothing.
-@p UP						|								| Increase neural network threshold (Darknet or ONNX).
-@p DOWN						|								| Decrease neural network threshold (Darknet or ONNX).
+@p a (or @p LEFT)			| yes							| Go to previous image.  If at the first image, do nothing.
+@p d (or @p RIGHT)			| yes							| Go to the next image.  If at the last image, do nothing.
+@p w						|								| Move/Navigate up (or increase threshold).
+@p s						|								| Move/Navigate down (or decrease threshold).
 @p PAGEUP					| yes							| Go to the previous image which has not yet been marked.  (Also see @p 'Y'.)
 @p PAGEDOWN					| yes							| Go to the next image which has not yet been marked.  (Also see @p 'y'.)
 @p HOME						| yes							| Go to the first image.
 @p END						| yes							| Go to the last image.
-@p ENTER (or @p RETURN)		|								| Display the 'class' menu (see @p 'c' key). In multi-bounding box merge mode, confirms the current frame's bounding box selection.
-@p DEL						|								| Delete the currently selected marking.
-@p BACKSPACE				|								| Same as @p DEL.
-@p SHIFT + @p DEL			| no							| Delete the current image from disk.  Moves the image to the trash, removing it from the data set.  Be careful, this @em does @em not prompt!
-@p ESC						| yes							| Cancels "zoom" if active, otherwise quit from DarkMark.
+@p ENTER (or @p RETURN)		|								| In merge mode, confirms the current frame's selection.
+@p x (or @p DEL)			|								| Delete the currently selected marking.
+@p v (or @p SHIFT + @p DEL)	| no							| Delete the current image from disk.  Moves the image to the trash, removing it from the data set.  Be careful, this @em does @em not prompt!
+@p ESC						| yes							| Cancels "zoom", cancels merge mode, otherwise quit from DarkMark.
 @p F1						|								| About DarkMark.
 @p TAB						|								| Move focus to the next marking.
 @p SHIFT + @p TAB			|								| Move focus to the previous marking.
@@ -27,37 +26,36 @@ Key							| Saves Modified Marks First	| Description
 @p CTRL + @p v (or @p SHIFT + @p INSERT)	|				| Paste the annotations from the clipboard into the current image.
 @p SPACE					|								| Toggle between automatic zoom and manual zoom (see @p '-', @p '+', @p 'ESC' keys, and @p CTRL below).
 @p ` (backtick)				| yes							| Toggle merge mode. Select one or more bounding boxes in the first frame, then corresponding boxes in the second frame, and interpolate all pairs across intermediate frames.
-@p a (lowercase)			|								| Accept all Darknet predictions (if any) for the current image as actual markings.
-@p A (uppercase)			|								| Accept only the currently-selected prediction and discard all other predictions.  If none are selected, then this behaves like @p 'a' where all predictions are accepted.
+@p q (lowercase)			|								| Accept all Darknet predictions (if any) for the current image as actual markings.
+@p Q (uppercase) / @p SHIFT + @p q	|						| Accept only the currently-selected prediction and discard all other predictions.
 @p b (lowercase)			|								| Toggle @em bold mode.  All markings will be displayed in "bold", making it easier to review.
-@p B (uppercase)			|								| Toggle @em shade mode.  All marked rectangles will be shaded in a semi-transparent colour.
-@p c (lowercase)			|								| Display the 'class' menu (see @p ENTER key).
-@p C (uppercase)			|								| Clear all marks for the current image.
-@p d (lowercase)			|								| Snap the current annotation, or all annotations on the current image if no annotation is selected.
-@p D (uppercase)			|								| Toggle auto-snapping.  Intended for use when annotating objects on a simple background, such as text on light-coloured paper.  (But see note below.)
+@p B (uppercase) / @p SHIFT + @p b	|						| Toggle @em shade mode.  All marked rectangles will be shaded in a semi-transparent colour.
+@p c (lowercase)			|								| Display the 'class' menu.
+@p C (uppercase) / @p SHIFT + @p c	|						| Clear all marks for the current image.
+@p SHIFT + @p d				|								| Snap the current annotation, or all annotations on the current image.
+@p CTRL + @p d				|								| Toggle auto-snapping.
 @p e						|								| Miscellaneous settings window.
 @p f						| yes							| Filter window.
-@p h						| yes							| Cycle between the various heatmaps for each class.  This will only make a difference if your network has more than 1 class.
+@p h						| yes							| Cycle between the various heatmaps for each class.
 @p H						| yes							| Toggle loading and displaying the heatmap from Darknet.
 @p j						| yes							| Jump to a different image.
 @p l						|								| Cycle between the various label modes (on, off, auto).
-@p m						|								| Toggle hiding/showing the marks.  This may also impact showing predictions if it is set to @p auto (see @p 'p' key).
+@p m						|								| Toggle hiding/showing the marks.
 @p n						| yes							| Mark image as empty ("none") and move to the next image.
 @p o 						| yes							| Mass delete predictions from multiple images.
-@p p						|								| Toggle Darknet predictions.  This can be used to force DarkMark to show the Darknet predictions even on images that have already been marked.  Darknet predictions are never saved to the @p .json or @p .txt files, they have to be accepted first.  (See @p 'a' key.)
+@p p						|								| Toggle Darknet predictions.
 @p r (lowercase)			| yes							| Randomly shuffle the images and load the first image.
 @p R (uppercase)			| yes							| Sort images alphabetically.
-@p s (lowercase)			|								| Save the current image, with the markings (if any) to a new filename.  Think of this as "screenshot".  Screenshots must be saved in either @p .jpg or @p .png file format (default is @p PNG).
-@p S (uppercase)			|								| Same as @p 's' (lowercase) but the file will be saved at 100% zoom, not at the current zoom level.
-@p t						| yes							| Toggle image tiling.  See @ref ImageSize.
-@p w						|								| Toggle black-and-white mode. Images remain unchanged on disk, but shown in black-and-white (not greyscale!) in the main DarkMark window.  This can be useful when annotating images of text documents.
+@p CTRL + @p s				|								| Save the current image with markings to a new filename (screenshot).
+@p SHIFT + @p s				|								| Save screenshot at full 100% size.
+@p t						| yes							| Toggle image tiling.
+@p SHIFT + @p w				|								| Toggle black-and-white mode.
 @p y (lowercase)			|								| Copy marks from previous (alphabetical) marked up image.
 @p Y (uppercase)			|								| Copy marks from next (alphabetical) marked up image.
-@p z						| yes							| This zooms into the image to review all the annotations.  Use @p 'z' again to move to the next annotation or file.
-@p 0-9						|								| Set the class ID of the currently selected mark to the specified value zero through nine.
-@p CTRL + @p 0-9			|								| Set the class ID of the currently selected mark to the value 10-19 (specified key + 10).
-@p ALT + @p 0-9				|								| Set the class ID of the currently selected mark to the value 20-29 (specified key + 20).
-@p CTRL + @p ALT + @p 0-9	|								| Set the class ID of the currently selected mark to the value 30-39 (specified key + 30).
+@p z						| yes							| Zoom into the image to review annotations.
+@p 1-9, 0					|								| Set class ID: key 1 = class 0, key 2 = class 1, ..., key 0 = class 9.
+@p CTRL + @p 1-9, 0			|								| Set class ID: key ctrl+1 = class 10, ..., key ctrl+0 = class 19.
+@p ALT + @p 1-9, 0			|								| Set class ID: key alt+1 = class 20, ..., key alt+0 = class 29.
 
 In addition to these keyboard shortcuts, note the following mouse behaviour:
 
