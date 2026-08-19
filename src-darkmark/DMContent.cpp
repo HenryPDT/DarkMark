@@ -3214,13 +3214,8 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 
 			if (selected_mark >= 0)
 			{
-				// remember the class and size of this mark in case the user wants to double-click and create a similar one
 				const Mark & m = marks.at(selected_mark);
-				most_recent_class_idx = m.class_idx;
 				most_recent_size = m.get_normalized_bounding_rect().size();
-
-				const auto & opencv_colour = annotation_colours.at(most_recent_class_idx % annotation_colours.size());
-				crosshair_colour = Colour(opencv_colour[2], opencv_colour[1], opencv_colour[0]);
 			}
 
 			rebuild_image_and_repaint();
@@ -3263,13 +3258,8 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 
 			if (selected_mark >= 0)
 			{
-				// remember the class and size of this mark in case the user wants to double-click and create a similar one
 				const Mark & m = marks.at(selected_mark);
-				most_recent_class_idx = m.class_idx;
 				most_recent_size = m.get_normalized_bounding_rect().size();
-
-				const auto & opencv_colour = annotation_colours.at(most_recent_class_idx % annotation_colours.size());
-				crosshair_colour = Colour(opencv_colour[2], opencv_colour[1], opencv_colour[0]);
 			}
 
 			rebuild_image_and_repaint();

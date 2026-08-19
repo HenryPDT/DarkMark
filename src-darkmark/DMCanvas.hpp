@@ -40,5 +40,8 @@ namespace dm
 		
 		/// Track the original position of the mark being resized in the selection vector
 		int mark_original_selection_position;
+
+		/// Track the class of the mark being resized so it doesn't overwrite most_recent_class_idx
+		int resized_mark_class_idx;
 	};
 }

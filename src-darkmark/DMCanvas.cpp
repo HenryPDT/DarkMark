@@ -8,7 +8,8 @@ dm::DMCanvas::DMCanvas(DMContent & c) :
 	content(c),
 	is_panning(false),
 	mark_was_selected_for_merge(false),
-	mark_original_selection_position(-1)
+	mark_original_selection_position(-1),
+	resized_mark_class_idx(-1)
 {
 	setName("ImageCanvas");
 
@@ -517,7 +518,6 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 					{
 						smallest_area = area;
 						content.selected_mark = idx;
-						content.most_recent_class_idx = m.class_idx;
 						content.most_recent_size = m.get_normalized_bounding_rect().size();
 					}
 				}
@@ -558,11 +558,15 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 			}
 		}
 		
-		content.most_recent_class_idx = content.marks[index_to_delete].class_idx;
+		resized_mark_class_idx = content.marks[index_to_delete].class_idx;
 		content.marks.erase(content.marks.begin() + index_to_delete);
 		content.selected_mark = -1;
 		content.need_to_save = true;
 		mouseDrag(event);
+	}
+	else
+	{
+		resized_mark_class_idx = -1;
 	}
 
 	if (previous_selected_mark != content.selected_mark)
@@ -697,7 +701,12 @@ void dm::DMCanvas::mouseDragFinished(juce::Rectangle<int> drag_rect, const Mouse
 		" image_height="	+ std::to_string(image_height	));
 #endif
 
-	const int class_idx = content.most_recent_class_idx;
+	int class_idx = content.most_recent_class_idx;
+	if (resized_mark_class_idx >= 0)
+	{
+		class_idx = resized_mark_class_idx;
+		resized_mark_class_idx = -1;
+	}
 	Mark m(	cv::Point2d(midx/image_width, midy/image_height),
 			cv::Size2d(width/image_width, height/image_height),
 			content.original_image.size(), class_idx);
