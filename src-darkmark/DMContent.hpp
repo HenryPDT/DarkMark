@@ -307,6 +307,7 @@ namespace dm
 			 * @see @ref dm::CrosshairComponent::zoom_image_offset
 			 */
 			cv::Point zoom_point_of_interest;
+			cv::Point zoom_viewport_anchor; ///< Point on canvas where zoom_point_of_interest should anchor (-1, -1 for canvas center)
 
 			SId zoom_review_marks_remaining;
 
@@ -342,7 +343,7 @@ namespace dm
 			size_t massDeleteMarks(const cv::Rect2d &selectionArea, int classIdx);
 
 			// Unified zoom setter for both keyboard and mouse scroll
-			void setZoom(double new_zoom_factor, cv::Point zoom_point);
+			void setZoom(double new_zoom_factor, cv::Point zoom_point, cv::Point canvas_anchor = cv::Point(-1, -1));
 
 			/// History of marks for Undo operations on the current image
 			std::vector<std::vector<Mark>> undo_stack;

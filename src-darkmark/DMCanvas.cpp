@@ -331,9 +331,12 @@ void dm::DMCanvas::rebuild_cache_image()
 			);
 #endif
 
+		const int anchor_x = (content.zoom_viewport_anchor.x >= 0 ? content.zoom_viewport_anchor.x : (w / 2));
+		const int anchor_y = (content.zoom_viewport_anchor.y >= 0 ? content.zoom_viewport_anchor.y : (h / 2));
+
 		cv::Rect r(
-			content.user_specified_zoom_factor * content.zoom_point_of_interest.x - w / 2,
-			content.user_specified_zoom_factor * content.zoom_point_of_interest.y - h / 2,
+			std::round(content.user_specified_zoom_factor * content.zoom_point_of_interest.x - anchor_x),
+			std::round(content.user_specified_zoom_factor * content.zoom_point_of_interest.y - anchor_y),
 			w, h);
 
 		if (r.width < std::min(content.scaled_image.cols, w))
@@ -348,16 +351,6 @@ void dm::DMCanvas::rebuild_cache_image()
 			const double delta = (std::min(content.scaled_image.rows, h) - r.height) / 2.0;
 			r.y -= delta;
 			r.height += std::round(delta * 2.0);
-		}
-		if (r.x > 0 and r.x < 100)
-		{
-			// near the left border...we may as well stick to the border
-			r.x = 0;
-		}
-		if (r.y > 0 and r.y < 100)
-		{
-			// near the top border...we may as well stick to the border
-			r.y = 0;
 		}
 		if (r.x < 0)
 		{
@@ -704,6 +697,7 @@ void dm::DMCanvas::mouseDragFinished(juce::Rectangle<int> drag_rect, const Mouse
 
 		content.zoom_point_of_interest.x = (zoom_image_offset.x + (content.canvas.getWidth()  / 2)) / content.current_zoom_factor;
 		content.zoom_point_of_interest.y = (zoom_image_offset.y + (content.canvas.getHeight() / 2)) / content.current_zoom_factor;
+		content.zoom_viewport_anchor = cv::Point(-1, -1);
 		zoom_image_offset = {0, 0};
 
 		content.rebuild_image_and_repaint();
@@ -805,7 +799,7 @@ void dm::DMCanvas::mouseWheelMove(const MouseEvent & event, const MouseWheelDeta
 {
     if (event.mods.isCtrlDown())
     {
-        // Center zoom on the crosshair (mouse position)
+        // Anchor zoom on the mouse cursor position
         const auto point = event.getPosition();
         cv::Point zoom_point = cv::Point(
             std::round((point.x + zoom_image_offset.x) / content.current_zoom_factor),
@@ -820,7 +814,7 @@ void dm::DMCanvas::mouseWheelMove(const MouseEvent & event, const MouseWheelDeta
         {
             zoom -= 0.1;
         }
-        content.setZoom(zoom, zoom_point);
+        content.setZoom(zoom, zoom_point, cv::Point(point.x, point.y));
         return;
     }
     // Default: scroll images

@@ -64,6 +64,7 @@ dm::DMContent::DMContent(const std::string & prefix) :
 	user_specified_zoom_factor(-1.0),
 	previous_zoom_factor(5.0),
 	current_zoom_factor(1.0),
+	zoom_viewport_anchor(-1, -1),
 	merge_mode_active(false),
 	merge_start_index(0)
 {
@@ -795,6 +796,7 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 	darknet_image_processing_time = "";
 	selected_mark	= -1;
 	selected_marks.clear();
+	zoom_viewport_anchor = cv::Point(-1, -1);
 	undo_stack.clear();
 	redo_stack.clear();
 	original_image	= cv::Mat();
@@ -3120,13 +3122,14 @@ dm::DMContent& dm::DMContent::remove_annotations(const std::string& image_filena
 	return *this;
 }
 
-void dm::DMContent::setZoom(double new_zoom_factor, cv::Point zoom_point)
+void dm::DMContent::setZoom(double new_zoom_factor, cv::Point zoom_point, cv::Point canvas_anchor)
 {
     // Clamp zoom
     if (new_zoom_factor < 0.01) new_zoom_factor = 0.01;
     if (new_zoom_factor > 5.0) new_zoom_factor = 5.0;
     user_specified_zoom_factor = std::round(new_zoom_factor * 10.0) / 10.0;
     zoom_point_of_interest = zoom_point;
+    zoom_viewport_anchor = canvas_anchor;
     resized();
     rebuild_image_and_repaint();
     show_message("zoom: " + std::to_string(static_cast<int>(user_specified_zoom_factor * 100.0)) + "%");
@@ -3532,6 +3535,7 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 		case KeybindAction::ZoomIn:
 			{
 				const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
+				const bool inside_canvas = (point.x >= 0 and point.x < canvas.getWidth() and point.y >= 0 and point.y < canvas.getHeight());
 				cv::Point zoom_point = cv::Point(
 					std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor),
 					std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor)
@@ -3542,26 +3546,33 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 				{
 					zoom = 5.0;
 				}
-				setZoom(zoom, zoom_point);
+				setZoom(zoom, zoom_point, inside_canvas ? cv::Point(point.x, point.y) : cv::Point(-1, -1));
 			}
 			return true;
 			
 		case KeybindAction::ZoomInLarge:
 			{
 				const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
+				const bool inside_canvas = (point.x >= 0 and point.x < canvas.getWidth() and point.y >= 0 and point.y < canvas.getHeight());
 				cv::Point zoom_point = cv::Point(
 					std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor),
 					std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor)
 				);
-				setZoom(5.0, zoom_point);
+				setZoom(5.0, zoom_point, inside_canvas ? cv::Point(point.x, point.y) : cv::Point(-1, -1));
 			}
 			return true;
 			
 		case KeybindAction::ZoomOut:
 			{
+				const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
+				const bool inside_canvas = (point.x >= 0 and point.x < canvas.getWidth() and point.y >= 0 and point.y < canvas.getHeight());
+				cv::Point zoom_point = inside_canvas ? cv::Point(
+					std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor),
+					std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor)
+				) : zoom_point_of_interest;
 				double zoom = user_specified_zoom_factor > 0.0 ? user_specified_zoom_factor : current_zoom_factor;
 				zoom -= 0.1;
-				setZoom(zoom, zoom_point_of_interest);
+				setZoom(zoom, zoom_point, inside_canvas ? cv::Point(point.x, point.y) : cv::Point(-1, -1));
 			}
 			return true;
 			
@@ -3570,20 +3581,21 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 			{
 				// go back to "auto" zoom
 				zoom_point_of_interest = cv::Size(0, 0);
+				zoom_viewport_anchor = cv::Point(-1, -1);
 				previous_zoom_factor = user_specified_zoom_factor;
 				user_specified_zoom_factor = -1.0;
 				show_message("zoom: auto");
 			}
 			else
 			{
-				// restore the previous zoom factor around the current mouse position
+				// restore previous zoom factor
 				const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
-				Log("zoom point of interest was: x=" + std::to_string(point.x) + " y=" + std::to_string(point.y));
-				zoom_point_of_interest.x = std::max(0, point.x) / current_zoom_factor;
-				zoom_point_of_interest.y = std::max(0, point.y) / current_zoom_factor;
-				Log("zoom point of interest now: x=" + std::to_string(zoom_point_of_interest.x) + " y=" + std::to_string(zoom_point_of_interest.y));
-				user_specified_zoom_factor = previous_zoom_factor;
-				show_message("zoom: " + std::to_string(static_cast<int>(user_specified_zoom_factor * 100.0)) + "%");
+				const bool inside_canvas = (point.x >= 0 and point.x < canvas.getWidth() and point.y >= 0 and point.y < canvas.getHeight());
+				cv::Point zoom_point = cv::Point(
+					std::round((point.x + canvas.zoom_image_offset.x) / current_zoom_factor),
+					std::round((point.y + canvas.zoom_image_offset.y) / current_zoom_factor)
+				);
+				setZoom(previous_zoom_factor, zoom_point, inside_canvas ? cv::Point(point.x, point.y) : cv::Point(-1, -1));
 			}
 			resized();
 			rebuild_image_and_repaint();
