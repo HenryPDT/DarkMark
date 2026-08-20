@@ -518,7 +518,13 @@ bool dm::DMContent::keyPressed(const KeyPress & key)
 
 dm::DMContent & dm::DMContent::set_class(const size_t class_idx)
 {
-	if (selected_mark >= 0 and (size_t)selected_mark < marks.size())
+	std::vector<int> targets = selected_marks;
+	if (targets.empty() and selected_mark >= 0 and (size_t)selected_mark < marks.size())
+	{
+		targets.push_back(selected_mark);
+	}
+
+	if (!targets.empty())
 	{
 		if (class_idx >= names.size() - 1)
 		{
@@ -528,10 +534,16 @@ dm::DMContent & dm::DMContent::set_class(const size_t class_idx)
 		else
 		{
 			push_undo_state();
-			auto & m = marks[selected_mark];
-			m.class_idx = class_idx;
-			m.name = names.at(m.class_idx);
-			m.description = names.at(m.class_idx);
+			for (int idx : targets)
+			{
+				if (idx >= 0 and (size_t)idx < marks.size())
+				{
+					auto & m = marks[idx];
+					m.class_idx = class_idx;
+					m.name = names.at(m.class_idx);
+					m.description = names.at(m.class_idx);
+				}
+			}
 			need_to_save = true;
 		}
 	}
@@ -782,6 +794,7 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 	zoom_review_marks_remaining.clear();
 	darknet_image_processing_time = "";
 	selected_mark	= -1;
+	selected_marks.clear();
 	undo_stack.clear();
 	redo_stack.clear();
 	original_image	= cv::Mat();
@@ -1616,7 +1629,26 @@ dm::DMContent & dm::DMContent::copy_marks_from_previous_image()
 
 dm::DMContent & dm::DMContent::accept_current_mark()
 {
-	if (selected_mark >= 0 and (size_t)selected_mark < marks.size())
+	if (!selected_marks.empty())
+	{
+		push_undo_state();
+		for (int idx : selected_marks)
+		{
+			if (idx >= 0 and (size_t)idx < marks.size())
+			{
+				auto & m = marks.at(idx);
+				if (m.is_prediction)
+				{
+					m.is_prediction	= false;
+					m.name			= names.at(m.class_idx);
+					m.description	= names.at(m.class_idx);
+					need_to_save	= true;
+				}
+			}
+		}
+		rebuild_image_and_repaint();
+	}
+	else if (selected_mark >= 0 and (size_t)selected_mark < marks.size())
 	{
 		auto & m = marks.at(selected_mark);
 		if (m.is_prediction)
@@ -2652,6 +2684,66 @@ cv::Rect2d dm::DMContent::convertToNormalized(const cv::Rect & areaInScreenCoord
 }
 
 
+void dm::DMContent::toggleMarkSelection(int idx)
+{
+	if (idx < 0 or idx >= static_cast<int>(marks.size()))
+	{
+		return;
+	}
+
+	auto it = std::find(selected_marks.begin(), selected_marks.end(), idx);
+	if (it != selected_marks.end())
+	{
+		selected_marks.erase(it);
+		if (selected_mark == idx)
+		{
+			selected_mark = (selected_marks.empty() ? -1 : selected_marks.back());
+		}
+	}
+	else
+	{
+		selected_marks.push_back(idx);
+		selected_mark = idx;
+		most_recent_size = marks[idx].get_normalized_bounding_rect().size();
+	}
+
+	if (!selected_marks.empty())
+	{
+		show_message(std::to_string(selected_marks.size()) + " mark" + (selected_marks.size() == 1 ? "" : "s") + " selected");
+	}
+
+	rebuild_image_and_repaint();
+}
+
+
+void dm::DMContent::clearSelection()
+{
+	if (selected_mark != -1 or not selected_marks.empty())
+	{
+		selected_mark = -1;
+		selected_marks.clear();
+		rebuild_image_and_repaint();
+	}
+}
+
+
+void dm::DMContent::selectMark(int idx)
+{
+	if (idx < 0 or idx >= static_cast<int>(marks.size()))
+	{
+		clearSelection();
+		return;
+	}
+
+	selected_marks.clear();
+	selected_marks.push_back(idx);
+	selected_mark = idx;
+	most_recent_size = marks[idx].get_normalized_bounding_rect().size();
+
+	rebuild_image_and_repaint();
+}
+
+
 void dm::DMContent::startMultiBboxMergeMode()
 {
 	// Turn on the multi-bbox merge mode and clear any leftover data.
@@ -3294,7 +3386,25 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 			return true;
 			
 		case KeybindAction::DeleteSelectedMark:
-			if (selected_mark >= 0)
+			if (!selected_marks.empty())
+			{
+				push_undo_state();
+				// Sort indices descending so deleting earlier marks doesn't affect later indices
+				std::vector<int> sorted_indices = selected_marks;
+				std::sort(sorted_indices.rbegin(), sorted_indices.rend());
+				for (int idx : sorted_indices)
+				{
+					if (idx >= 0 and (size_t)idx < marks.size())
+					{
+						marks.erase(marks.begin() + idx);
+					}
+				}
+				selected_marks.clear();
+				selected_mark = -1;
+				need_to_save = true;
+				rebuild_image_and_repaint();
+			}
+			else if (selected_mark >= 0 and (size_t)selected_mark < marks.size())
 			{
 				push_undo_state();
 				auto iter = marks.begin() + selected_mark;
@@ -3311,6 +3421,8 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 				root["annotations"] = json::array();
 				size_t counter = 0;
 
+				const bool use_multi_selection = !selected_marks.empty();
+
 				// copy all of the bounding boxes into a JSON structure in the clipboard
 				for (size_t idx = 0; idx < marks.size(); idx ++)
 				{
@@ -3320,7 +3432,21 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 						continue;
 					}
 
-					if (selected_mark < 0 or selected_mark == static_cast<int>(idx))
+					bool should_copy = false;
+					if (use_multi_selection)
+					{
+						should_copy = (std::find(selected_marks.begin(), selected_marks.end(), static_cast<int>(idx)) != selected_marks.end());
+					}
+					else if (selected_mark >= 0)
+					{
+						should_copy = (selected_mark == static_cast<int>(idx));
+					}
+					else
+					{
+						should_copy = true;
+					}
+
+					if (should_copy)
 					{
 						const cv::Rect2d r = m.get_normalized_bounding_rect();
 						auto & j = root["annotations"][counter ++];
@@ -3356,6 +3482,7 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 						{
 							push_undo_state();
 						}
+						selected_marks.clear();
 						for (const auto & j : root["annotations"])
 						{
 							Log(std::to_string(counter) + ": " + j.dump());
@@ -3370,7 +3497,12 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 							m.is_prediction	= false;
 							need_to_save	= true;
 							marks.push_back(m);
+							selected_marks.push_back(static_cast<int>(marks.size() - 1));
 							counter ++;
+						}
+						if (!selected_marks.empty())
+						{
+							selected_mark = selected_marks.back();
 						}
 					}
 					catch (const std::exception & e)
@@ -3573,7 +3705,28 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 			}
 			else
 			{
-				cancelMultiBboxMerge();
+				if (first_frame_selected)
+				{
+					if (!selected_marks_for_merge.empty())
+					{
+						confirmSecondFrameSelection();
+					}
+					else
+					{
+						show_message("Merge mode active: double-click " + std::to_string(merge_start_marks.size()) + " bounding box" + (merge_start_marks.size() == 1 ? "" : "es") + " to interpolate (or press ESC to cancel).");
+					}
+				}
+				else
+				{
+					if (!selected_marks_for_merge.empty())
+					{
+						confirmFirstFrameSelection();
+					}
+					else
+					{
+						cancelMultiBboxMerge();
+					}
+				}
 			}
 			return true;
 			

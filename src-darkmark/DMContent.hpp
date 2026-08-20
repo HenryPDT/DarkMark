@@ -228,6 +228,11 @@ namespace dm
 			bool show_dots;
 			int corner_size;
 			int selected_mark;
+			std::vector<int> selected_marks; ///< Indices of currently selected marks for multi-selection.
+
+			void toggleMarkSelection(int idx);
+			void clearSelection();
+			void selectMark(int idx);
 
 			std::string darknet_image_processing_time;	///< How long it took darknet to make predictions for the current image.
 

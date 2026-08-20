@@ -167,7 +167,8 @@ void dm::DMCanvas::rebuild_cache_image()
 			continue;
 		}
 
-		const bool is_selected	= (static_cast<int>(idx) == content.selected_mark);
+		const bool is_selected	= (static_cast<int>(idx) == content.selected_mark or
+			std::find(content.selected_marks.begin(), content.selected_marks.end(), static_cast<int>(idx)) != content.selected_marks.end());
 		const bool is_selected_for_merge = content.multi_bbox_mode and 
 			std::find(content.selected_marks_for_merge.begin(), content.selected_marks_for_merge.end(), static_cast<int>(idx)) != content.selected_marks_for_merge.end();
 		const std::string name	= m.description;
@@ -533,6 +534,20 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 	if (index_to_delete >= 0)
 	{
 		content.push_undo_state();
+		// Check if the mark being deleted was in multi-selection
+		auto sel_it = std::find(content.selected_marks.begin(), content.selected_marks.end(), index_to_delete);
+		if (sel_it != content.selected_marks.end())
+		{
+			content.selected_marks.erase(sel_it);
+		}
+		for (auto& sel_idx : content.selected_marks)
+		{
+			if (sel_idx > index_to_delete)
+			{
+				sel_idx--;
+			}
+		}
+
 		// Check if the mark being deleted was selected for merge
 		mark_was_selected_for_merge = false;
 		mark_original_selection_position = -1;
@@ -568,6 +583,25 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 	else
 	{
 		resized_mark_class_idx = -1;
+
+		if (content.selected_mark >= 0)
+		{
+			if (event.mods.isShiftDown())
+			{
+				content.toggleMarkSelection(content.selected_mark);
+			}
+			else
+			{
+				content.selectMark(content.selected_mark);
+			}
+		}
+		else
+		{
+			if (not event.mods.isShiftDown())
+			{
+				content.clearSelection();
+			}
+		}
 	}
 
 	if (previous_selected_mark != content.selected_mark)
@@ -619,6 +653,7 @@ void dm::DMCanvas::mouseDoubleClick(const MouseEvent & event)
 
 	content.marks.push_back(m);
 	content.selected_mark = content.marks.size() - 1;
+	content.selected_marks = {content.selected_mark};
 	content.need_to_save = true;
 	content.image_is_completely_empty = false;
 	if (content.snapping_enabled)
@@ -722,6 +757,7 @@ void dm::DMCanvas::mouseDragFinished(juce::Rectangle<int> drag_rect, const Mouse
 
 	content.marks.push_back(m);
 	content.selected_mark = content.marks.size() - 1;
+	content.selected_marks = {content.selected_mark};
 	content.most_recent_size = m.get_normalized_bounding_rect().size();
 	content.need_to_save = true;
 	content.image_is_completely_empty = false;
