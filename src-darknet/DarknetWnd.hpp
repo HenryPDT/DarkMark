@@ -60,6 +60,7 @@ namespace dm
 			Value v_extra_flags;
 			Value v_train_with_all_images;
 			Value v_training_images_percentage;
+			Value v_random_seed;
 			Value v_limit_validation_images;
 			Value v_image_width;
 			Value v_image_height;

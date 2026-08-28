@@ -24,7 +24,7 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	lbl_val_percentage("", "Validation %: 20.0"),
 	lbl_seed("", "Seed (optional):"),
 	txt_seed(),
-	help_seed("", "Leave empty for random split, or enter a number for reproducible split"),
+	help_seed("", "Default is 42 for reproducible split. Clear for random, or enter another number"),
 	ok_button("Export"),
 	cancel_button("Cancel"),
 	ok_pressed(false),
@@ -89,7 +89,8 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	txt_seed.setMultiLine(false);
 	txt_seed.setReturnKeyStartsNewLine(false);
 	txt_seed.setInputFilter(new TextEditor::LengthAndCharacterRestriction(10, "0123456789"), true);
-	txt_seed.setTooltip("Enter a numeric seed for reproducible splits, or leave empty for random");
+	txt_seed.setText("42", NotificationType::dontSendNotification);
+	txt_seed.setTooltip("Enter a numeric seed for reproducible splits (default: 42), or leave empty for random");
 	
 	help_seed.setFont(Font(FontOptions(12.0f, Font::italic)));
 

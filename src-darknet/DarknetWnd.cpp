@@ -276,6 +276,7 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 	v_extra_flags					= info.extra_flags.c_str();
 	v_train_with_all_images			= info.train_with_all_images;
 	v_training_images_percentage	= std::round(100.0 * info.training_images_percentage);
+	v_random_seed					= info.random_seed;
 	v_limit_validation_images		= info.limit_validation_images;
 	v_image_width					= info.image_width;
 	v_image_height					= info.image_height;
@@ -435,6 +436,10 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 	{
 		s->setEnabled(false);
 	}
+	properties.add(s);
+
+	s = new SliderPropertyComponent(v_random_seed, getText("random seed"), 0.0, 1000000.0, 1.0);
+	setTooltip(s, "Random seed used for dataset shuffling and train/validation split. Using the same seed guarantees reproducible splits.");
 	properties.add(s);
 
 	b = new BooleanPropertyComponent(v_remove_small_annotations, getText("remove small annotations"), getText("remove small annotations"));
@@ -802,6 +807,7 @@ void dm::DarknetWnd::buttonClicked(Button * button)
 	cfg().setValue(content.cfg_prefix + "darknet_extra_flags"			, v_extra_flags					);
 	cfg().setValue(content.cfg_prefix + "darknet_train_with_all_images"	, v_train_with_all_images		);
 	cfg().setValue(content.cfg_prefix + "darknet_training_percentage"	, v_training_images_percentage	);
+	cfg().setValue(content.cfg_prefix + "darknet_random_seed"			, v_random_seed					);
 	cfg().setValue(content.cfg_prefix + "darknet_limit_validation_images",v_limit_validation_images		);
 	cfg().setValue(content.cfg_prefix + "darknet_image_width"			, v_image_width					);
 	cfg().setValue(content.cfg_prefix + "darknet_image_height"			, v_image_height				);
@@ -837,6 +843,7 @@ void dm::DarknetWnd::buttonClicked(Button * button)
 	info.extra_flags				= v_extra_flags				.toString().toStdString();
 	info.train_with_all_images		= v_train_with_all_images	.getValue();
 	info.training_images_percentage	= static_cast<double>(v_training_images_percentage.getValue()) / 100.0;
+	info.random_seed				= v_random_seed				.getValue();
 	info.limit_validation_images	= v_limit_validation_images	.getValue();
 	info.image_width				= v_image_width				.getValue();
 	info.image_height				= v_image_height			.getValue();
@@ -1258,7 +1265,9 @@ void dm::DarknetWnd::create_Darknet_training_and_validation_files(
 		Log("number of crop+zoom images created ....... " + std::to_string(number_of_zooms_created));
 	}
 
-	std::shuffle(all_output_images.begin(), all_output_images.end(), get_random_engine());
+	std::default_random_engine rng(info.random_seed);
+
+	std::shuffle(all_output_images.begin(), all_output_images.end(), rng);
 
 	if (info.limit_negative_samples)
 	{
@@ -1297,7 +1306,7 @@ void dm::DarknetWnd::create_Darknet_training_and_validation_files(
 			number_of_empty_images = negative_samples.size();
 			all_output_images.swap(negative_samples);
 			all_output_images.insert(all_output_images.end(), annotated_images.begin(), annotated_images.end());
-			std::shuffle(all_output_images.begin(), all_output_images.end(), get_random_engine());
+			std::shuffle(all_output_images.begin(), all_output_images.end(), rng);
 		}
 	}
 
@@ -1350,6 +1359,7 @@ void dm::DarknetWnd::create_Darknet_training_and_validation_files(
 	Log("total number of training images ............. " + std::to_string(number_of_files_train) + " (" + info.train_filename + ")");
 	Log("total number of validation images ........... " + std::to_string(number_of_files_valid) + " (" + info.valid_filename + ")");
 	Log("cap validation images ....................... " + std::string(info.limit_validation_images ? "true" : "false"));
+	Log("random seed ................................. " + std::to_string(info.random_seed));
 
 	std::ofstream fs_train(info.train_filename);
 	std::ofstream fs_valid(info.valid_filename);

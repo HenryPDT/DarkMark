@@ -61,6 +61,7 @@ dm::ProjectInfo::ProjectInfo(const std::string & prefix)
 	extra_flags					= cfg().get_str		(cfg_prefix + "darknet_extra_flags"				, "-dont_show -map -gpus 0");
 	train_with_all_images		= cfg().get_bool	(cfg_prefix + "darknet_train_with_all_images"	, true	);
 	training_images_percentage	= cfg().get_int		(cfg_prefix + "darknet_training_percentage"		, 80	) / 100.0;
+	random_seed					= cfg().get_int		(cfg_prefix + "darknet_random_seed"				, 42	);
 	limit_validation_images		= cfg().get_bool	(cfg_prefix + "darknet_limit_validation_images"	, false	);
 	image_width					= cfg().get_int		(cfg_prefix + "darknet_image_width"				, 352	);
 	image_height				= cfg().get_int		(cfg_prefix + "darknet_image_height"			, 256	);
@@ -105,6 +106,8 @@ dm::ProjectInfo::ProjectInfo(const std::string & prefix)
 	if (options.count("zoom_images"				))	zoom_images				= toBool(options.at("zoom_images"				));
 	if (options.count("limit_neg_samples"		))	limit_negative_samples	= toBool(options.at("limit_neg_samples"			));
 	if (options.count("limit_validation_images"	))	limit_validation_images	= toBool(options.at("limit_validation_images"	));
+	if (options.count("seed"					))	random_seed				= toInt(options.at("seed"						));
+	if (options.count("random_seed"				))	random_seed				= toInt(options.at("random_seed"				));
 	if (options.count("yolo_anchors"			))	recalculate_anchors		= toBool(options.at("yolo_anchors"				));
 	if (options.count("learning_rate"			))	learning_rate			= toFloat(options.at("learning_rate"			));
 	if (options.count("class_imbalance"			))	class_imbalance			= toBool(options.at("class_imbalance"			));
