@@ -27,6 +27,7 @@ namespace dm
 		EraseAllMarks,
 		DeleteCurrentImage,
 		DeleteSelectedMark,
+		DuplicateMarkAtCursor,
 		CopyAnnotations,
 		PasteAnnotations,
 		Undo,

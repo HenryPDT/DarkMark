@@ -796,7 +796,6 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 	darknet_image_processing_time = "";
 	selected_mark	= -1;
 	selected_marks.clear();
-	zoom_viewport_anchor = cv::Point(-1, -1);
 	undo_stack.clear();
 	redo_stack.clear();
 	original_image	= cv::Mat();
@@ -3136,6 +3135,59 @@ void dm::DMContent::setZoom(double new_zoom_factor, cv::Point zoom_point, cv::Po
 }
 
 
+void dm::DMContent::duplicateMarkAtPosition(const cv::Point & canvas_pos)
+{
+	if (original_image.empty() or canvas.cached_image.isNull())
+	{
+		return;
+	}
+
+	cv::Size2d mark_size = most_recent_size;
+	int class_idx = most_recent_class_idx;
+
+	if (selected_mark >= 0 and selected_mark < static_cast<int>(marks.size()))
+	{
+		const auto & m = marks.at(selected_mark);
+		mark_size = m.get_normalized_bounding_rect().size();
+		class_idx = m.class_idx;
+	}
+
+	if (mark_size.width <= 0.0 or mark_size.height <= 0.0)
+	{
+		mark_size = cv::Size2d(0.05, 0.05);
+	}
+
+	if (class_idx < 0 or class_idx >= static_cast<int>(names.size()))
+	{
+		class_idx = 0;
+	}
+
+	push_undo_state();
+
+	const double x = double(canvas_pos.x + canvas.zoom_image_offset.x) / canvas.cached_image.getWidth();
+	const double y = double(canvas_pos.y + canvas.zoom_image_offset.y) / canvas.cached_image.getHeight();
+
+	Mark m(cv::Point2d(x, y), mark_size, original_image.size(), class_idx);
+	m.name = names.at(class_idx);
+	m.description = m.name;
+
+	marks.push_back(m);
+	selected_mark = marks.size() - 1;
+	selected_marks = {selected_mark};
+	most_recent_size = mark_size;
+	most_recent_class_idx = class_idx;
+	need_to_save = true;
+	image_is_completely_empty = false;
+
+	if (snapping_enabled)
+	{
+		snap_annotation(selected_mark);
+	}
+
+	rebuild_image_and_repaint();
+}
+
+
 bool dm::DMContent::handleKeybindAction(KeybindAction action)
 {
 	switch (action)
@@ -3418,6 +3470,20 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 			}
 			return true;
 			
+		case KeybindAction::DuplicateMarkAtCursor:
+			{
+				const auto point = canvas.getLocalPoint(nullptr, Desktop::getMousePosition());
+				if (point.x >= 0 and point.x < canvas.getWidth() and point.y >= 0 and point.y < canvas.getHeight())
+				{
+					duplicateMarkAtPosition(cv::Point(point.x, point.y));
+				}
+				else
+				{
+					show_message("Mouse cursor must be over the canvas to duplicate bounding box");
+				}
+			}
+			return true;
+
 		case KeybindAction::CopyAnnotations:
 			{
 				json root;

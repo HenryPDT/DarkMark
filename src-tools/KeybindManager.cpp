@@ -33,6 +33,7 @@ void dm::KeybindManager::initializeDefaults()
 	keybinds.emplace_back(KeybindAction::EraseAllMarks, KeyPress::createFromDescription("shift + c"));
 	keybinds.emplace_back(KeybindAction::DeleteCurrentImage, KeyPress::createFromDescription("v"));
 	keybinds.emplace_back(KeybindAction::DeleteSelectedMark, KeyPress::createFromDescription("x"));
+	keybinds.emplace_back(KeybindAction::DuplicateMarkAtCursor, KeyPress::createFromDescription("k"));
 	keybinds.emplace_back(KeybindAction::CopyAnnotations, KeyPress::createFromDescription("ctrl + c"));
 	keybinds.emplace_back(KeybindAction::PasteAnnotations, KeyPress::createFromDescription("ctrl + v"));
 	keybinds.emplace_back(KeybindAction::Undo, KeyPress::createFromDescription("ctrl + z"));
@@ -231,6 +232,7 @@ String dm::KeybindManager::getActionName(KeybindAction action)
 		case KeybindAction::EraseAllMarks: return "Erase All Marks";
 		case KeybindAction::DeleteCurrentImage: return "Delete Current Image";
 		case KeybindAction::DeleteSelectedMark: return "Delete Selected Mark";
+		case KeybindAction::DuplicateMarkAtCursor: return "Duplicate Mark at Cursor";
 		case KeybindAction::CopyAnnotations: return "Copy Annotations";
 		case KeybindAction::PasteAnnotations: return "Paste Annotations";
 		case KeybindAction::Undo: return "Undo";
@@ -324,6 +326,7 @@ String dm::KeybindManager::getActionDescription(KeybindAction action)
 		case KeybindAction::EraseAllMarks: return "Erase all marks";
 		case KeybindAction::DeleteCurrentImage: return "Delete current image from disk";
 		case KeybindAction::DeleteSelectedMark: return "Delete currently selected marking";
+		case KeybindAction::DuplicateMarkAtCursor: return "Create a bounding box of the same size/class centered at the mouse cursor";
 		case KeybindAction::CopyAnnotations: return "Copy annotations to clipboard";
 		case KeybindAction::PasteAnnotations: return "Paste annotations from clipboard";
 		case KeybindAction::Undo: return "Undo the last mark operation on the current image";

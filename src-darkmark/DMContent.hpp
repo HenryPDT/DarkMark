@@ -345,6 +345,9 @@ namespace dm
 			// Unified zoom setter for both keyboard and mouse scroll
 			void setZoom(double new_zoom_factor, cv::Point zoom_point, cv::Point canvas_anchor = cv::Point(-1, -1));
 
+			/// Duplicate currently selected (or most recent) mark at the given canvas position
+			void duplicateMarkAtPosition(const cv::Point & canvas_pos);
+
 			/// History of marks for Undo operations on the current image
 			std::vector<std::vector<Mark>> undo_stack;
 			/// History of marks for Redo operations on the current image

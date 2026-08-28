@@ -424,6 +424,12 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 {
 	CrosshairComponent::mouseDown(event);
 
+	if (event.mods.isAltDown() and event.mods.isLeftButtonDown())
+	{
+		content.duplicateMarkAtPosition(cv::Point(event.x, event.y));
+		return;
+	}
+
 	if (event.mods.isCtrlDown())
 	{
 		is_panning = true;
