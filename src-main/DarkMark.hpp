@@ -124,6 +124,7 @@ namespace dm
 #include "StartupCanvas.hpp"
 #include "DMContentImportTxt.hpp"
 #include "DMContentReloadResave.hpp"
+#include "DMContentRemoveDuplicateMarks.hpp"
 #include "DMContentRotateImages.hpp"
 #include "DMContentFlipImages.hpp"
 #include "DMContentDeleteRotateAndFlipImages.hpp"

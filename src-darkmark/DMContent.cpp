@@ -33,6 +33,7 @@ dm::DMContent::DMContent(const std::string & prefix) :
 	all_marks_are_bold(cfg().get_bool("all_marks_are_bold")),
 	show_processing_time(cfg().get_bool("show_processing_time")),
 	need_to_save(false),
+	duplicates_removed_last_load(0),
 	show_mouse_pointer(cfg().get_bool("show_mouse_pointer")),
 	IoU_info_found(false),
 	show_dots(cfg().get_bool("show_dots")),
@@ -1082,6 +1083,8 @@ dm::DMContent & dm::DMContent::save_json()
 {
 	if (json_filename.empty() == false)
 	{
+		duplicates_removed_last_load = dedupe_exact_marks(marks);
+
 		json root;
 		size_t next_id = 0;
 		for (auto & m : marks)
@@ -1322,6 +1325,13 @@ bool dm::DMContent::load_text()
 		{
 			image_is_completely_empty = true;
 		}
+
+		duplicates_removed_last_load = dedupe_exact_marks(marks);
+		if (duplicates_removed_last_load > 0)
+		{
+			need_to_save = true;
+			Log("removed " + std::to_string(duplicates_removed_last_load) + " duplicate mark(s) while loading " + text_filename);
+		}
 	}
 
 	return success;
@@ -1368,6 +1378,13 @@ bool dm::DMContent::load_json()
 			}
 			m.rebalance();
 			marks.push_back(m);
+		}
+
+		duplicates_removed_last_load = dedupe_exact_marks(marks);
+		if (duplicates_removed_last_load > 0)
+		{
+			need_to_save = true;
+			Log("removed " + std::to_string(duplicates_removed_last_load) + " duplicate mark(s) while loading " + json_filename);
 		}
 
 		if (marks.empty())
@@ -1706,6 +1723,76 @@ dm::DMContent & dm::DMContent::accept_all_marks()
 }
 
 
+size_t dm::DMContent::dedupe_exact_marks(VMarks & marks_to_dedupe)
+{
+	size_t removed = 0;
+	VMarks unique_marks;
+
+	for (const auto & mark : marks_to_dedupe)
+	{
+		bool already_exists = false;
+		for (const auto & existing : unique_marks)
+		{
+			if (existing.class_idx == mark.class_idx and
+				existing.normalized_corner_points == mark.normalized_corner_points)
+			{
+				already_exists = true;
+				break;
+			}
+		}
+
+		if (already_exists)
+		{
+			removed ++;
+		}
+		else
+		{
+			unique_marks.push_back(mark);
+		}
+	}
+
+	marks_to_dedupe = std::move(unique_marks);
+
+	return removed;
+}
+
+
+dm::DMContent & dm::DMContent::remove_duplicate_marks()
+{
+	if (marks.empty())
+	{
+		show_message("no marks to deduplicate");
+		return *this;
+	}
+
+	push_undo_state();
+	const size_t removed = dedupe_exact_marks(marks);
+	duplicates_removed_last_load = removed;
+
+	if (removed > 0)
+	{
+		need_to_save = true;
+		rebuild_image_and_repaint();
+		show_message("removed " + std::to_string(removed) + " duplicate mark" + (removed == 1 ? "" : "s"));
+	}
+	else
+	{
+		show_message("no duplicate marks were found");
+	}
+
+	return *this;
+}
+
+
+dm::DMContent & dm::DMContent::remove_duplicate_marks_in_every_image()
+{
+	DMContentRemoveDuplicateMarks helper(*this);
+	helper.runThread();
+
+	return *this;
+}
+
+
 dm::DMContent & dm::DMContent::erase_all_marks()
 {
 	push_undo_state();
@@ -1876,12 +1963,14 @@ PopupMenu dm::DMContent::create_popup_menu()
 		text = "erase all " + std::to_string(marks.size()) + " marks";
 	}
 	image.addItem(text																					, has_any_marks, false	, std::function<void()>( [&]{ erase_all_marks();			} ));
+	image.addItem("remove duplicate marks"																						, has_any_marks, false	, std::function<void()>( [&]{ remove_duplicate_marks();		} ));
 	image.addItem("delete image from disk"																						, std::function<void()>( [&]{ delete_current_image();		} ));
 	image.addSeparator();
 	image.addItem("jump..."																										, std::function<void()>( [&]{ show_jump_wnd();				} ));
 	image.addSeparator();
 	image.addItem("move empty images..."																						, std::function<void()>( [&]{ move_empty_images();			} ));
 	image.addItem("re-load and re-save every image"																				, std::function<void()>( [&]{ reload_resave_every_image();	} ));
+	image.addItem("remove duplicate marks in every image..."																		, std::function<void()>( [&]{ remove_duplicate_marks_in_every_image();	} ));
 	image.addSeparator();
 	image.addItem("flip images..."																								, std::function<void()>( [&]{ flip_images();				} ));
 	image.addItem("rotate images..."																							, std::function<void()>( [&]{ rotate_every_image();			} ));

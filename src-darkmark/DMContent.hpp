@@ -117,6 +117,12 @@ namespace dm
 
 			DMContent & erase_all_marks();
 
+			/** Remove exact duplicate marks (same class and corner points). */
+			DMContent & remove_duplicate_marks();
+
+			/** Remove exact duplicate marks from every image in the project. */
+			DMContent & remove_duplicate_marks_in_every_image();
+
 			PopupMenu create_class_menu();
 
 			PopupMenu create_popup_menu();
@@ -223,6 +229,8 @@ namespace dm
 			bool all_marks_are_bold;
 			bool show_processing_time;
 			bool need_to_save;
+			size_t duplicates_removed_last_load;
+			static size_t dedupe_exact_marks(VMarks & marks);
 			bool show_mouse_pointer;
 			bool IoU_info_found;
 			bool show_dots;
