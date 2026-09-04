@@ -151,9 +151,9 @@ void dm::DMContentReviewIoU::run()
 
 					const auto & pred = darkhelp_results.at(idx);
 
-					if (pred.all_probabilities.count(class_idx) == 0)
+					const int mapped_pred_class = content.get_mapped_class_idx(pred.best_class);
+					if (mapped_pred_class < 0 || mapped_pred_class != class_idx)
 					{
-						// this prediction has 0% chance to match the class_idx so look for something else
 						continue;
 					}
 
@@ -183,9 +183,9 @@ void dm::DMContentReviewIoU::run()
 
 					const auto & pred = onnx_results.at(idx);
 
-					if (pred.class_idx != class_idx)
+					const int mapped_pred_class = content.get_mapped_class_idx(pred.class_idx);
+					if (mapped_pred_class < 0 || mapped_pred_class != class_idx)
 					{
-						// this prediction doesn't match the class_idx so look for something else
 						continue;
 					}
 
@@ -263,8 +263,12 @@ void dm::DMContentReviewIoU::run()
 			{
 				if (prediction_index_consumed.count(idx) == 0)
 				{
-					const auto best_class = darkhelp_results.at(idx).best_class;
-					classes_predictions_without_annotations.insert(best_class);
+					const int mapped_class = content.get_mapped_class_idx(static_cast<int>(darkhelp_results.at(idx).best_class));
+					if (mapped_class < 0)
+					{
+						continue;
+					}
+					classes_predictions_without_annotations.insert(mapped_class);
 					info.number_of_predictions_without_annotations ++;
 				}
 			}
@@ -275,8 +279,12 @@ void dm::DMContentReviewIoU::run()
 			{
 				if (prediction_index_consumed.count(idx) == 0)
 				{
-					const auto best_class = onnx_results.at(idx).class_idx;
-					classes_predictions_without_annotations.insert(best_class);
+					const int mapped_class = content.get_mapped_class_idx(onnx_results.at(idx).class_idx);
+					if (mapped_class < 0)
+					{
+						continue;
+					}
+					classes_predictions_without_annotations.insert(mapped_class);
 					info.number_of_predictions_without_annotations ++;
 				}
 			}

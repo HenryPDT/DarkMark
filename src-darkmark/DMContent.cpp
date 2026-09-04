@@ -1,7 +1,10 @@
 // DarkMark (C) 2019-2024 Stephane Charette <stephanecharette@gmail.com>
 
 #include "DarkMark.hpp"
+#include <darknet.hpp>
 #include "OnnxHelp.hpp"
+#include "DMModelClassMapWnd.hpp"
+#include "DMContentBatchAutoLabel.hpp"
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -39,6 +42,9 @@ dm::DMContent::DMContent(const std::string & prefix) :
 	show_dots(cfg().get_bool("show_dots")),
 	corner_size(cfg().get_int("corner_size")),
 	selected_mark(-1),
+	assisted_labeling_iou_threshold(static_cast<double>(cfg().get_int("assisted_labeling_iou_threshold", 35)) / 100.0),
+	hide_duplicate_predictions(cfg().get_bool("hide_duplicate_predictions", true)),
+	model_class_mapping_warning_shown(false),
 	images_are_loading(false),
 	black_and_white_mode_enabled(cfg().get_bool("black_and_white_mode_enabled")),
 	black_and_white_threshold_blocksize(cfg().get_int("black_and_white_threshold_blocksize")),
@@ -272,22 +278,27 @@ void dm::DMContent::start_darknet()
 
 	if (weights_filename.empty() == false and String(weights_filename).endsWith(".onnx"))
 	{
-		if (File(weights_filename).existsAsFile() and File(names_filename).existsAsFile())
+		if (File(weights_filename).existsAsFile())
 		{
 			try
 			{
-				Log("manually parsing " + names_filename);
-				std::ifstream ifs(names_filename);
-				std::string line;
-				while (std::getline(ifs, line))
+				std::vector<std::string> onnx_model_names;
+				const std::string model_names_filename = File(weights_filename).withFileExtension(".names").getFullPathName().toStdString();
+				if (File(model_names_filename).existsAsFile())
 				{
-					line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
-					line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
-					if (!line.empty()) names.push_back(line);
+					Log("loading ONNX class names from " + model_names_filename);
+					std::ifstream ifs(model_names_filename);
+					std::string line;
+					while (std::getline(ifs, line))
+					{
+						line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+						line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
+						if (!line.empty()) onnx_model_names.push_back(line);
+					}
 				}
-				
+
 				Log("attempting to load ONNX model " + weights_filename);
-				dmapp().onnx_nn.reset(new OnnxHelp::NN(weights_filename, names));
+				dmapp().onnx_nn.reset(new OnnxHelp::NN(weights_filename, onnx_model_names));
 				
 				// Check if this model has dynamic height/width dimensions and set custom input size if configured
 				if (dmapp().onnx_nn && dmapp().onnx_nn->is_dynamic())
@@ -456,6 +467,26 @@ void dm::DMContent::start_darknet()
 	{
 		const auto & opencv_colour = annotation_colours.at(most_recent_class_idx % annotation_colours.size());
 		crosshair_colour = Colour(opencv_colour[2], opencv_colour[1], opencv_colour[0]);
+	}
+
+	load_model_class_mapping();
+
+	if ((dmapp().onnx_nn || dmapp().darkhelp_nn) && show_window && !model_class_mapping_warning_shown)
+	{
+		bool any_mapped = false;
+		for (const int v : model_to_project_class_map)
+		{
+			if (v >= 0)
+			{
+				any_mapped = true;
+				break;
+			}
+		}
+		if (!any_mapped)
+		{
+			model_class_mapping_warning_shown = true;
+			show_message("All model classes are set to ignore. Open \"model class mapping\" to enable predictions.");
+		}
 	}
 
 	set_sort_order(sort_order);
@@ -885,10 +916,14 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 					task = "converting predictions";
 					for (auto prediction : darkhelp_nn().prediction_results)
 					{
-						Mark m(prediction.original_point, prediction.original_size, original_image.size(), prediction.best_class);
-						m.name = names.at(m.class_idx);
-						m.description = prediction.name;
-						m.is_prediction = true;
+						int mapped_idx = get_mapped_class_idx(prediction.best_class);
+						if (mapped_idx < 0 || (size_t)mapped_idx >= names.size() - 1)
+						{
+							continue;
+						}
+
+						Mark m = make_prediction_mark_from_darkhelp(prediction, mapped_idx, original_image.size());
+						m.is_duplicate_of_existing = is_duplicate_of_existing_marks(m, marks, original_image.size());
 						marks.push_back(m);
 					}
 				}
@@ -910,13 +945,14 @@ dm::DMContent & dm::DMContent::load_image(const size_t new_idx, const bool full_
 					task = "converting ONNX predictions";
 					for (auto& prediction : results)
 					{
-						Mark m;
-						m.image_dimensions = original_image.size();
-						m.set(prediction.rect);
-						m.class_idx = prediction.class_idx;
-						m.name = prediction.name;
-						m.description = prediction.name;
-						m.is_prediction = true;
+						int mapped_idx = get_mapped_class_idx(prediction.class_idx);
+						if (mapped_idx < 0 || (size_t)mapped_idx >= names.size() - 1)
+						{
+							continue;
+						}
+
+						Mark m = make_prediction_mark_from_onnx(prediction, mapped_idx, original_image.size());
+						m.is_duplicate_of_existing = is_duplicate_of_existing_marks(m, marks, original_image.size());
 						marks.push_back(m);
 					}
 				}
@@ -1172,6 +1208,298 @@ dm::DMContent & dm::DMContent::save_json()
 	need_to_save = false;
 
 	return *this;
+}
+
+
+bool dm::DMContent::load_marks_from_disk_files(const std::string & image_filename, const cv::Size & image_size, VMarks & out_marks, bool & out_completely_empty) const
+{
+	out_marks.clear();
+	out_completely_empty = false;
+
+	File f_json = File(image_filename).withFileExtension(".json");
+	File f_txt = File(image_filename).withFileExtension(".txt");
+
+	if (f_json.existsAsFile())
+	{
+		try
+		{
+			json root = json::parse(f_json.loadFileAsString().toStdString());
+			if (root.contains("mark") && root["mark"].is_array())
+			{
+				for (size_t idx = 0; idx < root["mark"].size(); idx++)
+				{
+					Mark m;
+					m.class_idx = root["mark"][idx]["class_idx"];
+
+					if (m.class_idx < names.size())
+					{
+						m.name = names.at(m.class_idx);
+					}
+					else
+					{
+						m.name = root["mark"][idx].value("name", "");
+					}
+					m.description = m.name;
+					m.is_prediction = false;
+					m.is_duplicate_of_existing = false;
+					m.normalized_all_points.clear();
+
+					for (size_t point_idx = 0; point_idx < root["mark"][idx]["points"].size(); point_idx++)
+					{
+						cv::Point2d p;
+						p.x = root["mark"][idx]["points"][point_idx]["x"];
+						p.y = root["mark"][idx]["points"][point_idx]["y"];
+						m.normalized_all_points.push_back(p);
+					}
+
+					if (root.contains("image") && root["image"].contains("width") && root["image"].contains("height"))
+					{
+						m.image_dimensions = cv::Size(root["image"]["width"], root["image"]["height"]);
+					}
+					else
+					{
+						m.image_dimensions = image_size;
+					}
+
+					m.rebalance();
+					out_marks.push_back(m);
+				}
+			}
+
+			if (out_marks.empty())
+			{
+				out_completely_empty = root.value("completely_empty", false);
+			}
+
+			return true;
+		}
+		catch (const std::exception & e)
+		{
+			Log("failed to load marks from " + f_json.getFullPathName().toStdString() + ": " + e.what());
+			return false;
+		}
+	}
+
+	if (f_txt.existsAsFile())
+	{
+		std::ifstream ifs(f_txt.getFullPathName().toStdString());
+		std::string line;
+		while (std::getline(ifs, line))
+		{
+			std::istringstream iss(line);
+			iss.imbue(std::locale("C"));
+			int class_idx = 0;
+			double x = 0.0;
+			double y = 0.0;
+			double w = 0.0;
+			double h = 0.0;
+			if (iss >> class_idx >> x >> y >> w >> h)
+			{
+				if (class_idx < 0 || class_idx >= static_cast<int>(names.size()))
+				{
+					continue;
+				}
+
+				if (x > 0.0 && y > 0.0 && w > 0.0 && h > 0.0)
+				{
+					Mark m(cv::Point2d(x, y), cv::Size2d(w, h), image_size, static_cast<size_t>(class_idx));
+					m.name = names.at(class_idx);
+					m.description = m.name;
+					m.is_prediction = false;
+					m.is_duplicate_of_existing = false;
+					out_marks.push_back(m);
+				}
+			}
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+
+bool dm::DMContent::save_marks_to_disk_files(const std::string & image_filename, const VMarks & marks_to_save, const cv::Size & image_size, double scale_factor, bool image_is_completely_empty) const
+{
+	const std::string json_path = File(image_filename).withFileExtension(".json").getFullPathName().toStdString();
+	const std::string text_path = File(image_filename).withFileExtension(".txt").getFullPathName().toStdString();
+
+	bool delete_txt_file = true;
+	if (image_is_completely_empty)
+	{
+		delete_txt_file = false;
+	}
+
+	std::ofstream fs_txt(text_path);
+	fs_txt.imbue(std::locale("C"));
+	for (const auto & m : marks_to_save)
+	{
+		if (m.is_prediction)
+		{
+			continue;
+		}
+
+		delete_txt_file = false;
+
+		const cv::Rect2d r = m.get_normalized_bounding_rect();
+		const double w = r.width;
+		const double h = r.height;
+		const double x = r.x + w / 2.0;
+		const double y = r.y + h / 2.0;
+		fs_txt << std::fixed << std::setprecision(10) << m.class_idx << " " << x << " " << y << " " << w << " " << h << std::endl;
+	}
+	fs_txt.close();
+
+	if (delete_txt_file)
+	{
+		std::remove(text_path.c_str());
+	}
+
+	json root;
+	size_t next_id = 0;
+	for (const auto & m : marks_to_save)
+	{
+		if (m.is_prediction)
+		{
+			continue;
+		}
+
+		root["mark"][next_id]["class_idx"] = m.class_idx;
+		root["mark"][next_id]["name"] = m.name;
+
+		const cv::Rect2d r1 = m.get_normalized_bounding_rect();
+		const cv::Rect r2 = m.get_bounding_rect(image_size);
+
+		root["mark"][next_id]["rect"]["x"] = r1.x;
+		root["mark"][next_id]["rect"]["y"] = r1.y;
+		root["mark"][next_id]["rect"]["w"] = r1.width;
+		root["mark"][next_id]["rect"]["h"] = r1.height;
+		root["mark"][next_id]["rect"]["int_x"] = r2.x;
+		root["mark"][next_id]["rect"]["int_y"] = r2.y;
+		root["mark"][next_id]["rect"]["int_w"] = r2.width;
+		root["mark"][next_id]["rect"]["int_h"] = r2.height;
+
+		for (size_t point_idx = 0; point_idx < m.normalized_all_points.size(); point_idx++)
+		{
+			const cv::Point2d & p = m.normalized_all_points.at(point_idx);
+			root["mark"][next_id]["points"][point_idx]["x"] = p.x;
+			root["mark"][next_id]["points"][point_idx]["y"] = p.y;
+			root["mark"][next_id]["points"][point_idx]["int_x"] = static_cast<int>(std::round(p.x * static_cast<double>(image_size.width)));
+			root["mark"][next_id]["points"][point_idx]["int_y"] = static_cast<int>(std::round(p.y * static_cast<double>(image_size.height)));
+		}
+
+		next_id++;
+	}
+
+	root["image"]["scale"] = scale_factor;
+	root["image"]["width"] = image_size.width;
+	root["image"]["height"] = image_size.height;
+	root["timestamp"] = std::time(nullptr);
+	root["version"] = DARKMARK_VERSION;
+
+	if (next_id == 0 && image_is_completely_empty)
+	{
+		root["completely_empty"] = true;
+	}
+	else
+	{
+		root["completely_empty"] = false;
+	}
+
+	if (next_id > 0 || image_is_completely_empty)
+	{
+		std::ofstream fs_json(json_path);
+		fs_json.imbue(std::locale("C"));
+		fs_json << root.dump(1, '\t') << std::endl;
+
+		if (fs_json.fail())
+		{
+			Log("Error saving " + json_path);
+			return false;
+		}
+	}
+	else
+	{
+		std::remove(json_path.c_str());
+	}
+
+	return true;
+}
+
+
+bool dm::DMContent::is_duplicate_of_existing_marks(const Mark & prediction, const VMarks & existing_marks, const cv::Size & image_size, double iou_threshold) const
+{
+	const double threshold = (iou_threshold >= 0.0) ? iou_threshold : assisted_labeling_iou_threshold;
+	const cv::Rect pred_r = prediction.get_bounding_rect(image_size);
+	for (const auto & existing_m : existing_marks)
+	{
+		if (!existing_m.is_prediction && existing_m.class_idx == prediction.class_idx)
+		{
+			const cv::Rect exist_r = existing_m.get_bounding_rect(image_size);
+			if (Darknet::iou(pred_r, exist_r) >= threshold)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+
+void dm::DMContent::refresh_duplicate_prediction_flags()
+{
+	for (auto & m : marks)
+	{
+		if (m.is_prediction)
+		{
+			m.is_duplicate_of_existing = is_duplicate_of_existing_marks(m, marks, original_image.size());
+		}
+		else
+		{
+			m.is_duplicate_of_existing = false;
+		}
+	}
+}
+
+
+bool dm::DMContent::is_mark_visible_for_navigation(const Mark & m) const
+{
+	if ((marks_are_shown && !m.is_prediction) || (predictions_are_shown && m.is_prediction))
+	{
+		if (m.is_prediction && marks_are_shown && hide_duplicate_predictions && m.is_duplicate_of_existing)
+		{
+			return false;
+		}
+		return true;
+	}
+	return false;
+}
+
+
+dm::Mark dm::DMContent::make_prediction_mark_from_darkhelp(const DarkHelp::PredictionResult & prediction, int mapped_idx, const cv::Size & image_size) const
+{
+	Mark m(prediction.original_point, prediction.original_size, image_size, static_cast<size_t>(mapped_idx));
+	m.name = names.at(mapped_idx);
+	m.description = names.at(mapped_idx) + " " + std::to_string(static_cast<int>(std::round(prediction.all_probabilities.at(prediction.best_class) * 100.0f))) + "%";
+	m.is_prediction = true;
+	m.is_duplicate_of_existing = false;
+	return m;
+}
+
+
+dm::Mark dm::DMContent::make_prediction_mark_from_onnx(const OnnxHelp::PredictionResult & prediction, int mapped_idx, const cv::Size & image_size) const
+{
+	Mark m;
+	m.image_dimensions = image_size;
+	m.set(prediction.rect);
+	m.class_idx = static_cast<size_t>(mapped_idx);
+	m.name = names.at(mapped_idx);
+	const int conf_pct = static_cast<int>(std::round(prediction.probability * 100.0f));
+	m.description = names.at(mapped_idx) + " " + std::to_string(conf_pct) + "%";
+	m.is_prediction = true;
+	m.is_duplicate_of_existing = false;
+	return m;
 }
 
 
@@ -1665,6 +1993,7 @@ dm::DMContent & dm::DMContent::accept_current_mark()
 			}
 		}
 		rebuild_image_and_repaint();
+		refresh_duplicate_prediction_flags();
 	}
 	else if (selected_mark >= 0 and (size_t)selected_mark < marks.size())
 	{
@@ -1677,6 +2006,7 @@ dm::DMContent & dm::DMContent::accept_current_mark()
 			m.description	= names.at(m.class_idx);
 			need_to_save	= true;
 			rebuild_image_and_repaint();
+			refresh_duplicate_prediction_flags();
 		}
 	}
 	else
@@ -1691,34 +2021,314 @@ dm::DMContent & dm::DMContent::accept_current_mark()
 
 dm::DMContent & dm::DMContent::accept_all_marks()
 {
-	if (marks.empty() == false)
+	if (marks.empty())
 	{
-		// do nothing if we already have 1 or more full marks
-		bool ok_to_continue = true;
-		for (auto & m : marks)
+		return *this;
+	}
+
+	size_t accepted_count = 0;
+	size_t skipped_overlap_count = 0;
+
+	for (auto & m : marks)
+	{
+		if (!m.is_prediction)
 		{
-			if (m.is_prediction == false)
+			continue;
+		}
+
+		if (m.is_duplicate_of_existing)
+		{
+			skipped_overlap_count++;
+			continue;
+		}
+
+		accepted_count++;
+	}
+
+	if (accepted_count == 0)
+	{
+		if (skipped_overlap_count > 0)
+		{
+			show_message("All " + std::to_string(skipped_overlap_count) + " prediction(s) overlap with existing annotations");
+		}
+		return *this;
+	}
+
+	push_undo_state();
+
+	for (auto & m : marks)
+	{
+		if (!m.is_prediction)
+		{
+			continue;
+		}
+
+		if (m.is_duplicate_of_existing)
+		{
+			continue;
+		}
+
+		m.is_prediction = false;
+		if (m.class_idx < names.size())
+		{
+			m.name = names.at(m.class_idx);
+			m.description = names.at(m.class_idx);
+		}
+	}
+
+	need_to_save = true;
+	refresh_duplicate_prediction_flags();
+	rebuild_image_and_repaint();
+	std::string msg = "Accepted " + std::to_string(accepted_count) + " mark" + (accepted_count == 1 ? "" : "s");
+	if (skipped_overlap_count > 0)
+	{
+		msg += " (" + std::to_string(skipped_overlap_count) + " duplicate" + (skipped_overlap_count == 1 ? "" : "s") + " skipped)";
+	}
+	show_message(msg);
+
+	return *this;
+}
+
+
+dm::DMContent & dm::DMContent::accept_marks_of_class(const int target_class_idx)
+{
+	if (marks.empty())
+	{
+		return *this;
+	}
+
+	size_t accepted_count = 0;
+	size_t skipped_overlap_count = 0;
+
+	for (auto & m : marks)
+	{
+		if (!m.is_prediction || static_cast<int>(m.class_idx) != target_class_idx)
+		{
+			continue;
+		}
+
+		if (m.is_duplicate_of_existing)
+		{
+			skipped_overlap_count++;
+			continue;
+		}
+
+		accepted_count++;
+	}
+
+	if (accepted_count == 0)
+	{
+		if (skipped_overlap_count > 0)
+		{
+			show_message("All predictions of this class overlap with existing annotations");
+		}
+		return *this;
+	}
+
+	push_undo_state();
+
+	for (auto & m : marks)
+	{
+		if (!m.is_prediction || static_cast<int>(m.class_idx) != target_class_idx)
+		{
+			continue;
+		}
+
+		if (m.is_duplicate_of_existing)
+		{
+			continue;
+		}
+
+		m.is_prediction = false;
+		if (m.class_idx < names.size())
+		{
+			m.name = names.at(m.class_idx);
+			m.description = names.at(m.class_idx);
+		}
+	}
+
+	need_to_save = true;
+	refresh_duplicate_prediction_flags();
+	rebuild_image_and_repaint();
+	std::string class_str = (target_class_idx >= 0 && static_cast<size_t>(target_class_idx) < names.size()) ? names.at(target_class_idx) : "class " + std::to_string(target_class_idx);
+	std::string msg = "Accepted " + std::to_string(accepted_count) + " '" + class_str + "' mark" + (accepted_count == 1 ? "" : "s");
+	if (skipped_overlap_count > 0)
+	{
+		msg += " (" + std::to_string(skipped_overlap_count) + " duplicate" + (skipped_overlap_count == 1 ? "" : "s") + " skipped)";
+	}
+	show_message(msg);
+
+	return *this;
+}
+
+
+dm::DMContent & dm::DMContent::accept_marks_of_current_class()
+{
+	return accept_marks_of_class(static_cast<int>(most_recent_class_idx));
+}
+
+
+int dm::DMContent::get_mapped_class_idx(const int model_class_idx) const
+{
+	if (model_class_idx >= 0 && static_cast<size_t>(model_class_idx) < model_to_project_class_map.size())
+	{
+		return model_to_project_class_map[model_class_idx];
+	}
+	if (model_class_idx >= 0 && static_cast<size_t>(model_class_idx) < names.size() - 1)
+	{
+		return model_class_idx;
+	}
+	return -1;
+}
+
+
+void dm::DMContent::init_model_class_mapping()
+{
+	size_t num_classes = 0;
+	if (dmapp().onnx_nn && !dmapp().onnx_nn->get_class_names().empty())
+	{
+		model_class_names = dmapp().onnx_nn->get_class_names();
+		num_classes = model_class_names.size();
+	}
+	else if (!model_class_names.empty())
+	{
+		num_classes = model_class_names.size();
+	}
+	else if (dmapp().darkhelp_nn && !dmapp().darkhelp_nn->names.empty())
+	{
+		model_class_names = dmapp().darkhelp_nn->names;
+		num_classes = model_class_names.size();
+	}
+	else
+	{
+		num_classes = names.size() > 1 ? (names.size() - 1) : 1;
+		model_class_names.clear();
+		for (size_t i = 0; i < num_classes; i++)
+		{
+			model_class_names.push_back("class " + std::to_string(i));
+		}
+	}
+
+	model_to_project_class_map.assign(num_classes, -1);
+
+	const size_t num_project_classes = names.size() > 1 ? (names.size() - 1) : 0;
+	for (size_t i = 0; i < num_classes; i++)
+	{
+		std::string m_name = model_class_names[i];
+		std::transform(m_name.begin(), m_name.end(), m_name.begin(), ::tolower);
+
+		bool matched = false;
+		for (size_t j = 0; j < num_project_classes; j++)
+		{
+			std::string p_name = names[j];
+			std::transform(p_name.begin(), p_name.end(), p_name.begin(), ::tolower);
+			if (m_name == p_name)
 			{
-				ok_to_continue = false;
+				model_to_project_class_map[i] = static_cast<int>(j);
+				matched = true;
 				break;
 			}
 		}
 
-		if (ok_to_continue)
+		if (!matched)
 		{
-			push_undo_state();
-			for (auto & m : marks)
+			if (i < num_project_classes)
 			{
-				m.is_prediction	= false;
-				m.name			= names.at(m.class_idx);
-				m.description	= names.at(m.class_idx);
+				model_to_project_class_map[i] = static_cast<int>(i);
 			}
-
-			need_to_save = true;
-			rebuild_image_and_repaint();
 		}
 	}
+}
 
+
+void dm::DMContent::load_model_class_mapping()
+{
+	init_model_class_mapping();
+
+	const std::string saved_map = cfg().get_str(cfg_prefix + "onnx_class_map", "");
+	if (!saved_map.empty())
+	{
+		std::istringstream ss(saved_map);
+		std::string token;
+		while (std::getline(ss, token, ','))
+		{
+			auto colon = token.find(':');
+			if (colon != std::string::npos)
+			{
+				try
+				{
+					int model_id = std::stoi(token.substr(0, colon));
+					int proj_id = std::stoi(token.substr(colon + 1));
+					if (model_id < 0)
+					{
+						continue;
+					}
+					if (static_cast<size_t>(model_id) >= model_to_project_class_map.size())
+					{
+						model_to_project_class_map.resize(static_cast<size_t>(model_id) + 1, -1);
+						while (model_class_names.size() < model_to_project_class_map.size())
+						{
+							model_class_names.push_back("class " + std::to_string(model_class_names.size()));
+						}
+					}
+					if (proj_id < 0 || static_cast<size_t>(proj_id) >= names.size() - 1)
+					{
+						proj_id = -1;
+					}
+					model_to_project_class_map[model_id] = proj_id;
+				}
+				catch (...) {}
+			}
+		}
+	}
+}
+
+
+void dm::DMContent::save_model_class_mapping()
+{
+	std::string str;
+	for (size_t i = 0; i < model_to_project_class_map.size(); i++)
+	{
+		if (i > 0) str += ",";
+		str += std::to_string(i) + ":" + std::to_string(model_to_project_class_map[i]);
+	}
+	cfg().setValue((cfg_prefix + "onnx_class_map").c_str(), str.c_str());
+}
+
+
+dm::DMContent & dm::DMContent::show_model_class_mapping_wnd()
+{
+	Log("class mapping requested from editor");
+
+	std::vector<std::string> project_classes;
+	const size_t num_project_classes = names.size() > 0 ? (names.size() - 1) : 0;
+	for (size_t j = 0; j < num_project_classes; j++)
+	{
+		project_classes.push_back(names.at(j));
+	}
+
+	const std::string prefix = cfg_prefix;
+	const std::vector<std::string> model_classes = model_class_names;
+	auto safe = juce::Component::SafePointer<DMContent>(this);
+	MessageManager::callAsync([prefix, project_classes, model_classes, safe]()
+	{
+		if (safe == nullptr)
+		{
+			return;
+		}
+		show_model_class_mapping_dialog(prefix, project_classes, model_classes, safe.getComponent());
+	});
+	return *this;
+}
+
+
+dm::DMContent & dm::DMContent::show_batch_autolabel_wnd()
+{
+	if (!dmapp().batch_autolabel_dialog)
+	{
+		dmapp().batch_autolabel_dialog.reset(new BatchAutoLabelDialog(*this));
+	}
+	dmapp().batch_autolabel_dialog->toFront(true);
 	return *this;
 }
 
@@ -1772,6 +2382,7 @@ dm::DMContent & dm::DMContent::remove_duplicate_marks()
 	if (removed > 0)
 	{
 		need_to_save = true;
+		refresh_duplicate_prediction_flags();
 		rebuild_image_and_repaint();
 		show_message("removed " + std::to_string(removed) + " duplicate mark" + (removed == 1 ? "" : "s"));
 	}
@@ -1938,24 +2549,41 @@ PopupMenu dm::DMContent::create_popup_menu()
 	view.addItem("show heatmap"						, true									, heatmap_enabled						,  std::function<void()>( [&]{ toggle_heatmaps();						} ));
 	view.addItem("shade"							, true									, shade_rectangles						,  std::function<void()>( [&]{ toggle_shade_rectangles();				} ));
 
-	const size_t number_of_darknet_marks = [&]
+	size_t number_of_darknet_marks = 0;
+	size_t non_overlapping_predictions = 0;
+	std::map<int, size_t> non_overlapping_by_class;
+	for (const auto & m : marks)
 	{
-		size_t count = 0;
-		for (const auto & m : marks)
+		if (m.is_prediction)
 		{
-			if (m.is_prediction)
+			number_of_darknet_marks++;
+			if (!m.is_duplicate_of_existing)
 			{
-				count ++;
+				non_overlapping_predictions++;
+				non_overlapping_by_class[static_cast<int>(m.class_idx)]++;
 			}
 		}
-
-		return count;
-	}();
+	}
 
 	const bool has_any_marks = (marks.size() > 0);
 
 	PopupMenu image;
-	image.addItem("accept " + std::to_string(number_of_darknet_marks) + " pending mark" + (number_of_darknet_marks == 1 ? "" : "s"), (number_of_darknet_marks > 0)	, false	, std::function<void()>( [&]{ accept_all_marks();			} ));
+	std::string accept_text = "accept " + std::to_string(non_overlapping_predictions) + " non-overlapping mark" + (non_overlapping_predictions == 1 ? "" : "s");
+	image.addItem(accept_text, (non_overlapping_predictions > 0), false, std::function<void()>([&]{ accept_all_marks(); }));
+
+	if (non_overlapping_by_class.size() > 1)
+	{
+		PopupMenu accept_by_class_menu;
+		for (const auto & pair : non_overlapping_by_class)
+		{
+			int c_idx = pair.first;
+			size_t count = pair.second;
+			std::string c_name = (c_idx >= 0 && static_cast<size_t>(c_idx) < names.size()) ? names.at(c_idx) : "class " + std::to_string(c_idx);
+			accept_by_class_menu.addItem("accept " + std::to_string(count) + " '" + c_name + "' mark" + (count == 1 ? "" : "s"), true, false,
+				std::function<void()>([this, c_idx]{ accept_marks_of_class(c_idx); }));
+		}
+		image.addSubMenu("accept by class", accept_by_class_menu);
+	}
 
 	std::string text = "erase 1 mark";
 	if (marks.size() != 1)
@@ -1965,6 +2593,9 @@ PopupMenu dm::DMContent::create_popup_menu()
 	image.addItem(text																					, has_any_marks, false	, std::function<void()>( [&]{ erase_all_marks();			} ));
 	image.addItem("remove duplicate marks"																						, has_any_marks, false	, std::function<void()>( [&]{ remove_duplicate_marks();		} ));
 	image.addItem("delete image from disk"																						, std::function<void()>( [&]{ delete_current_image();		} ));
+	image.addSeparator();
+	image.addItem("batch auto-label images...", (dmapp().onnx_nn || dmapp().darkhelp_nn), false, std::function<void()>([&]{ show_batch_autolabel_wnd(); }));
+	image.addItem("model class mapping...", (dmapp().onnx_nn || dmapp().darkhelp_nn), false, std::function<void()>([&]{ show_model_class_mapping_wnd(); }));
 	image.addSeparator();
 	image.addItem("jump..."																										, std::function<void()>( [&]{ show_jump_wnd();				} ));
 	image.addSeparator();
@@ -3273,6 +3904,7 @@ void dm::DMContent::duplicateMarkAtPosition(const cv::Point & canvas_pos)
 		snap_annotation(selected_mark);
 	}
 
+	refresh_duplicate_prediction_flags();
 	rebuild_image_and_repaint();
 }
 
@@ -3439,8 +4071,7 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 					}
 
 					const auto & m = marks.at(selected_mark);
-					if ((marks_are_shown and m.is_prediction == false) or
-						(predictions_are_shown and m.is_prediction))
+					if (is_mark_visible_for_navigation(m))
 					{
 						// we found one that works!  keep it!
 						break;
@@ -3483,8 +4114,7 @@ bool dm::DMContent::handleKeybindAction(KeybindAction action)
 					}
 
 					const auto & m = marks.at(selected_mark);
-					if ((marks_are_shown and m.is_prediction == false) or
-						(predictions_are_shown and m.is_prediction))
+					if (is_mark_visible_for_navigation(m))
 					{
 						// we found one that works!  keep it!
 						break;

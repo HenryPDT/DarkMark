@@ -78,6 +78,10 @@ namespace OnnxHelp
 			// Get current preprocessing configuration
 			PreprocessConfig get_preprocess_config() const { return preprocess_config; }
 
+			// Get and set class names
+			const std::vector<std::string>& get_class_names() const { return class_names; }
+			void set_class_names(const std::vector<std::string>& names) { class_names = names; }
+
 		private:
 			static Ort::SessionOptions GetSessionOptions();
 			static cv::Size GetModelInputSize(Ort::Session& session, bool& is_dynamic);

@@ -48,6 +48,7 @@ namespace dm
 			cv::Rect get_bounding_rect() const;
 
 			/// Update the image dimensions before returning the non-normalized bounding rectangle.
+			cv::Rect get_bounding_rect(const cv::Size & new_image_dimensions) const;
 			cv::Rect get_bounding_rect(const cv::Size & new_image_dimensions);
 
 			/// Get the normalized rectangle that contains all 4 points.
@@ -66,7 +67,7 @@ namespace dm
 			Mark & add(cv::Point2d new_point);
 			Mark & set(const ECorner & corner, const cv::Point & new_point);
 			Mark & set(const ECorner & corner, cv::Point2d new_point);
-			Mark & set(cv::Rect & r);
+			Mark & set(cv::Rect r);
 
 			/** Check each of the corners after one of the points has been modified by the user.  If a point has been
 			 * moved to a new location, then the order of TL-TR-BR-BL might also have been impacted, in which case the
@@ -99,5 +100,6 @@ namespace dm
 			std::string name;
 			std::string description;
 			bool is_prediction;
+			bool is_duplicate_of_existing;
 	};
 }

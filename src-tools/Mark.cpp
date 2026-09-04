@@ -45,6 +45,7 @@ dm::Mark::Mark(const cv::Point2d & midpoint, const cv::Size2d & normalized_size,
 	image_dimensions	= image_size;
 	class_idx			= class_index;
 	is_prediction		= false;
+	is_duplicate_of_existing = false;
 
 	return;
 }
@@ -168,6 +169,50 @@ cv::Rect dm::Mark::get_bounding_rect() const
 }
 
 
+cv::Rect dm::Mark::get_bounding_rect(const cv::Size & new_image_dimensions) const
+{
+	VPoints v;
+	v.reserve(normalized_all_points.size());
+
+	const double iw = static_cast<double>(new_image_dimensions.width);
+	const double ih = static_cast<double>(new_image_dimensions.height);
+
+	const int max_w = new_image_dimensions.width - 1;
+	const int max_h = new_image_dimensions.height - 1;
+
+	for (const auto & normalized_point : normalized_all_points)
+	{
+		cv::Point p;
+		p.x = std::round(normalized_point.x * iw);
+		p.y = std::round(normalized_point.y * ih);
+
+		if (p.x < 0) p.x = 0;
+		if (p.y < 0) p.y = 0;
+		if (p.x > max_w) p.x = max_w;
+		if (p.y > max_h) p.y = max_h;
+
+		v.push_back(p);
+	}
+
+	cv::Rect r = cv::boundingRect(v);
+
+	if (r.x < 0) r.x = 0;
+	if (r.y < 0) r.y = 0;
+	if (r.x >= new_image_dimensions.width) r.x = std::max(0, new_image_dimensions.width - 1);
+	if (r.y >= new_image_dimensions.height) r.y = std::max(0, new_image_dimensions.height - 1);
+	if (r.x + r.width > new_image_dimensions.width) r.width = new_image_dimensions.width - r.x;
+	if (r.y + r.height > new_image_dimensions.height) r.height = new_image_dimensions.height - r.y;
+
+	if (r.width <= 0) r.width = 1;
+	if (r.height <= 0) r.height = 1;
+
+	if (r.x + r.width > new_image_dimensions.width) r.width = new_image_dimensions.width - r.x;
+	if (r.y + r.height > new_image_dimensions.height) r.height = new_image_dimensions.height - r.y;
+
+	return r;
+}
+
+
 cv::Rect dm::Mark::get_bounding_rect(const cv::Size & new_image_dimensions)
 {
 	image_dimensions = new_image_dimensions;
@@ -272,7 +317,7 @@ dm::Mark & dm::Mark::set(const ECorner & corner, cv::Point2d new_point)
 }
 
 
-dm::Mark & dm::Mark::set(cv::Rect & r)
+dm::Mark & dm::Mark::set(cv::Rect r)
 {
 	const double image_width	= static_cast<double>(image_dimensions.width);
 	const double image_height	= static_cast<double>(image_dimensions.height);

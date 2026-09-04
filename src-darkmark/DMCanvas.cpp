@@ -106,7 +106,11 @@ void dm::DMCanvas::rebuild_cache_image()
 	{
 		if (m.is_prediction == true)
 		{
-			content.number_of_predictions ++;
+			const bool hidden_duplicate = m.is_duplicate_of_existing && content.marks_are_shown && content.hide_duplicate_predictions;
+			if (!hidden_duplicate)
+			{
+				content.number_of_predictions ++;
+			}
 		}
 		else
 		{
@@ -116,11 +120,6 @@ void dm::DMCanvas::rebuild_cache_image()
 			{
 				// this is a real mark which will be hidden from view
 				number_of_hidden_marks ++;
-			}
-			else if (content.show_predictions == EToggle::kAuto)
-			{
-				// this is a real mark which will be shown, so turn off predictions
-				content.predictions_are_shown = false;
 			}
 		}
 	}
@@ -163,6 +162,11 @@ void dm::DMCanvas::rebuild_cache_image()
 		}
 
 		if (m.is_prediction == true and content.predictions_are_shown == false)
+		{
+			continue;
+		}
+
+		if (m.is_prediction and content.marks_are_shown and content.hide_duplicate_predictions and m.is_duplicate_of_existing)
 		{
 			continue;
 		}
@@ -513,12 +517,19 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 				if ((content.marks_are_shown and m.is_prediction == false) or
 					(content.predictions_are_shown and m.is_prediction))
 				{
-					const int area = r.area();
-					if (area < smallest_area)
+					if (m.is_prediction and content.marks_are_shown and content.hide_duplicate_predictions and m.is_duplicate_of_existing)
 					{
-						smallest_area = area;
-						content.selected_mark = idx;
-						content.most_recent_size = m.get_normalized_bounding_rect().size();
+						// Do not select visually hidden duplicate predictions
+					}
+					else
+					{
+						const int area = r.area();
+						if (area < smallest_area)
+						{
+							smallest_area = area;
+							content.selected_mark = idx;
+							content.most_recent_size = m.get_normalized_bounding_rect().size();
+						}
 					}
 				}
 			}
@@ -577,6 +588,7 @@ void dm::DMCanvas::mouseDown(const MouseEvent & event)
 		content.marks.erase(content.marks.begin() + index_to_delete);
 		content.selected_mark = -1;
 		content.need_to_save = true;
+		content.refresh_duplicate_prediction_flags();
 		mouseDrag(event);
 	}
 	else
@@ -659,6 +671,7 @@ void dm::DMCanvas::mouseDoubleClick(const MouseEvent & event)
 	{
 		content.snap_annotation(content.selected_mark);
 	}
+	content.refresh_duplicate_prediction_flags();
 	content.rebuild_image_and_repaint();
 
 	return;
@@ -795,6 +808,7 @@ void dm::DMCanvas::mouseDragFinished(juce::Rectangle<int> drag_rect, const Mouse
 		content.snap_annotation(content.selected_mark);
 	}
 
+	content.refresh_duplicate_prediction_flags();
 	content.rebuild_image_and_repaint();
 
 	return;

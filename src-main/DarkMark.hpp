@@ -63,6 +63,7 @@ namespace dm
 	class SettingsWnd;
 	class FilterWnd;
 	class KeybindEditorWnd;
+	class BatchAutoLabelDialog;
 	class ProjectInfo;
 	class DMContentReview;
 	class DMContentReviewIoU;
@@ -136,5 +137,7 @@ namespace dm
 #include "DMContentReviewIoU.hpp"
 #include "DMWnd.hpp"
 #include "DMAppMenuModel.hpp"
+#include "DMModelClassMapWnd.hpp"
+#include "DMContentBatchAutoLabel.hpp"
 #include "DarkMarkApp.hpp"
 #include "OnnxHelp.hpp"

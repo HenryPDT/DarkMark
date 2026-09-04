@@ -89,6 +89,8 @@ dm::SettingsWnd::SettingsWnd(dm::DMContent & c) :
 	// Initialize ONNX threshold settings
 	v_onnx_threshold = cfg().get_int("onnx_threshold");
 	v_onnx_nms_threshold = cfg().get_int("onnx_nms_threshold");
+	v_assisted_labeling_iou_threshold = static_cast<int>(std::round(content.assisted_labeling_iou_threshold * 100.0));
+	v_hide_duplicate_predictions = content.hide_duplicate_predictions;
 
 	v_scrollfield_width			= content.scrollfield_width;
 	v_scrollfield_marker_size	= content.scrollfield.triangle_size;
@@ -121,6 +123,8 @@ dm::SettingsWnd::SettingsWnd(dm::DMContent & c) :
 	v_darkhelp_non_maximal_suppression_threshold.addListener(this);
 	v_onnx_threshold							.addListener(this);
 	v_onnx_nms_threshold						.addListener(this);
+	v_assisted_labeling_iou_threshold			.addListener(this);
+	v_hide_duplicate_predictions				.addListener(this);
 	v_scrollfield_width							.addListener(this);
 	v_scrollfield_marker_size					.addListener(this);
 	v_show_mouse_pointer						.addListener(this);
@@ -181,6 +185,14 @@ dm::SettingsWnd::SettingsWnd(dm::DMContent & c) :
 
 	b = new BooleanPropertyComponent(v_image_tiling, "enable image tiling", "enable image tiling");
 	b->setTooltip("Determines if images will be tiled when sent to darknet for processing. The default value is \"off\".");
+	properties.add(b);
+
+	s = new SliderPropertyComponent(v_assisted_labeling_iou_threshold, "assisted labeling duplicate IoU", 10, 90, 1);
+	s->setTooltip("Predictions with IoU >= this threshold against existing annotations of the same class are marked as duplicates and skipped during accept. Default value is 35%.");
+	properties.add(s);
+
+	b = new BooleanPropertyComponent(v_hide_duplicate_predictions, "hide duplicate predictions", "hide duplicate predictions");
+	b->setTooltip("Determines if duplicate predictions are visually hidden when annotations are shown. When annotations are hidden (M key), all predictions are shown. Default value is \"on\".");
 	properties.add(b);
 
 	pp.addSection("darknet", properties, true);
@@ -381,6 +393,8 @@ void dm::SettingsWnd::closeButtonPressed()
 	cfg().setValue("heatmap_alpha_blend"				, v_heatmap_alpha_blend							.getValue());
 	cfg().setValue("heatmap_threshold"					, v_heatmap_threshold							.getValue());
 	cfg().setValue("heatmap_visualize"					, v_heatmap_visualize							.getValue());
+	cfg().setValue("assisted_labeling_iou_threshold"	, static_cast<int>(v_assisted_labeling_iou_threshold.getValue()));
+	cfg().setValue("hide_duplicate_predictions"			, static_cast<bool>(v_hide_duplicate_predictions.getValue()));
 
 	dmapp().settings_wnd.reset(nullptr);
 
@@ -464,6 +478,10 @@ void dm::SettingsWnd::valueChanged(Value & value)
 	content.heatmap_alpha_blend					= v_heatmap_alpha_blend					.getValue();
 	content.heatmap_threshold					= v_heatmap_threshold					.getValue();
 	content.heatmap_visualize					= v_heatmap_visualize					.getValue();
+	content.assisted_labeling_iou_threshold		= static_cast<double>(static_cast<int>(v_assisted_labeling_iou_threshold.getValue())) / 100.0;
+	content.hide_duplicate_predictions			= static_cast<bool>(v_hide_duplicate_predictions.getValue());
+	cfg().setValue("assisted_labeling_iou_threshold", static_cast<int>(v_assisted_labeling_iou_threshold.getValue()));
+	cfg().setValue("hide_duplicate_predictions", static_cast<bool>(v_hide_duplicate_predictions.getValue()));
 
 	startTimer(250); // request a callback -- in milliseconds -- at which point in time we'll fully reload the current image
 

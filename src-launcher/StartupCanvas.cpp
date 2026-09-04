@@ -1,6 +1,7 @@
 // DarkMark (C) 2019-2024 Stephane Charette <stephanecharette@gmail.com>
 
 #include "DarkMark.hpp"
+#include "DMModelClassMapWnd.hpp"
 #include <algorithm>
 
 #include "json.hpp"
@@ -82,12 +83,41 @@ std::string format_timestamp(const Time t)
 }
 
 
+class ClassMapButtonPropertyComponent : public ButtonPropertyComponent
+{
+	public:
+		ClassMapButtonPropertyComponent(dm::StartupCanvas & c) :
+			ButtonPropertyComponent("class mapping", false),
+			canvas(c)
+		{
+		}
+
+		virtual ~ClassMapButtonPropertyComponent()
+		{
+		}
+
+		virtual void buttonClicked() override
+		{
+			dm::Log("class mapping button clicked");
+			canvas.show_model_class_mapping();
+		}
+
+		virtual String getButtonText() const override
+		{
+			return "Edit Class Mapping...";
+		}
+
+		dm::StartupCanvas & canvas;
+};
+
+
 dm::StartupCanvas::StartupCanvas(const std::string & key, const std::string & dir) :
 	Component("Startup Notebook Canvas"),
 	cfg_key(key),
 	hide_some_weight_files("hide extra .weights files"),
 	onnx_input_size_property(nullptr),
 	onnx_model_type_property(nullptr),
+	onnx_class_mapping_property(nullptr),
 	darknet_template_property(nullptr),
 	darknet_config_property(nullptr),
 	applying_filter(true),
@@ -156,6 +186,11 @@ dm::StartupCanvas::StartupCanvas(const std::string & key, const std::string & di
 	properties.add(tmp);
 	onnx_model_type_property = tmp;
 
+	auto btn_prop = new ClassMapButtonPropertyComponent(*this);
+	btn_prop->setTooltip("Configure how classes detected by the model map to project dataset classes.");
+	properties.add(btn_prop);
+	onnx_class_mapping_property = btn_prop;
+
 	tmp = new TextPropertyComponent(darknet_configuration_template			, "darknet template"		, 1000, false, true);
 	tmp->setTooltip("The configuration template will be filled in once you select a configuration file within the Darknet Options window. It indicates which Darknet configuration file is used as a template when creating the project's configuration.");
 	properties.add(tmp);
@@ -199,6 +234,11 @@ dm::StartupCanvas::StartupCanvas(const std::string & key, const std::string & di
 					onnx_model_type_property->setEnabled(true);
 					onnx_model_type_property->setTooltip("Shows whether the ONNX model has static or dynamic input dimensions");
 				}
+				if (onnx_class_mapping_property)
+				{
+					onnx_class_mapping_property->setEnabled(true);
+					onnx_class_mapping_property->setTooltip("Configure how classes detected by the model map to project dataset classes.");
+				}
 			}
 			else
 			{
@@ -212,6 +252,11 @@ dm::StartupCanvas::StartupCanvas(const std::string & key, const std::string & di
 				{
 					onnx_model_type_property->setEnabled(false);
 					onnx_model_type_property->setTooltip("Not applicable for Darknet models");
+				}
+				if (onnx_class_mapping_property)
+				{
+					onnx_class_mapping_property->setEnabled(false);
+					onnx_class_mapping_property->setTooltip("Not applicable for Darknet models");
 				}
 			}
 		}
@@ -235,7 +280,7 @@ dm::StartupCanvas::~StartupCanvas()
 void dm::StartupCanvas::resized()
 {
 	const int margin_size		= 5;
-	const int number_of_lines	= 19;
+	const int number_of_lines	= 20;
 	const int height_per_line	= 25;
 	const int total_pp_height	= number_of_lines * height_per_line;
 
@@ -771,137 +816,57 @@ void dm::StartupCanvas::selectedRowsChanged(int rowNumber)
 		{
 			darknet_weights_filename = info.full_name.c_str();
 			
-			// Check if this is an ONNX model and update input size (case-insensitive)
 			std::string lower_filename = info.full_name;
 			std::transform(lower_filename.begin(), lower_filename.end(), lower_filename.begin(), ::tolower);
 			
 			if (lower_filename.size() >= 5 && lower_filename.substr(lower_filename.size() - 5) == ".onnx")
 			{
-				try
+				// Never load the ONNX model in the launcher. Opening a session can lock up the machine.
+				initializing = true;
+
+				int width = cfg().getIntValue("project_" + cfg_key + "_onnx_input_width");
+				int height = cfg().getIntValue("project_" + cfg_key + "_onnx_input_height");
+				if (width <= 0 || height <= 0)
 				{
-					// Try to load the ONNX model to detect its input size
-					VStr names;
-					const String names_filename = darknet_names_filename.toString();
-					
-					if (File(names_filename).existsAsFile())
-					{
-						std::ifstream ifs(names_filename.toStdString());
-						std::string line;
-						while (std::getline(ifs, line))
-						{
-							line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
-							line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
-							if (!line.empty()) names.push_back(line);
-						}
-					}
-					
-					// Create a temporary ONNX model to detect input size
-					std::unique_ptr<OnnxHelp::NN> temp_nn;
-					temp_nn.reset(new OnnxHelp::NN(info.full_name, names));
-					
-					// Update the input size fields
-					cv::Size input_size = temp_nn->get_input_size();
-					bool is_dynamic = temp_nn->is_dynamic();
-					
-					// Temporarily disable validation
-					initializing = true;
-					
-					onnx_input_size = String(input_size.width) + " x " + String(input_size.height);
-					onnx_is_dynamic = is_dynamic ? "Dynamic" : "Static";
-					
-					// Save to configuration
-					cfg().setValue("project_" + cfg_key + "_onnx_input_width", input_size.width);
-					cfg().setValue("project_" + cfg_key + "_onnx_input_height", input_size.height);
-					cfg().setValue("project_" + cfg_key + "_onnx_is_dynamic", is_dynamic);
-					
-					// Control editability of input size field
-					if (onnx_input_size_property)
-					{
-						onnx_input_size_property->setEnabled(is_dynamic);
-						if (!is_dynamic)
-						{
-							onnx_input_size_property->setTooltip("Static model - input size is fixed and cannot be changed");
-						}
-						else
-						{
-							onnx_input_size_property->setTooltip("Model has dynamic height/width dimensions - input size can be customized");
-						}
-					}
-					
-					// Enable ONNX model type field for ONNX models
-					if (onnx_model_type_property)
-					{
-						onnx_model_type_property->setEnabled(true);
-						onnx_model_type_property->setTooltip("Shows whether the ONNX model has static or dynamic input dimensions");
-					}
-					
-					// Disable Darknet-specific fields for ONNX models
-					if (darknet_template_property)
-					{
-						darknet_template_property->setEnabled(false);
-						darknet_template_property->setTooltip("Not applicable for ONNX models");
-					}
-					if (darknet_config_property)
-					{
-						darknet_config_property->setEnabled(false);
-						darknet_config_property->setTooltip("Not applicable for ONNX models");
-					}
-					
-					// Re-enable validation
-					initializing = false;
-					onnx_processed = true;  // Mark that ONNX model was successfully processed
-				}
-				catch (const std::exception& e)
-				{
-					// Temporarily disable validation
-					initializing = true;
-					
-					// If we can't load the ONNX model, set default values
-					onnx_input_size = "640 x 640";
-					onnx_is_dynamic = "Unknown";
-					cfg().setValue("project_" + cfg_key + "_onnx_input_width", 640);
-					cfg().setValue("project_" + cfg_key + "_onnx_input_height", 640);
+					width = 640;
+					height = 640;
+					cfg().setValue("project_" + cfg_key + "_onnx_input_width", width);
+					cfg().setValue("project_" + cfg_key + "_onnx_input_height", height);
 					cfg().setValue("project_" + cfg_key + "_onnx_is_dynamic", true);
-					
-					// Disable the input size field since we can't determine if it's dynamic
-					if (onnx_input_size_property)
-					{
-						onnx_input_size_property->setEnabled(false);
-						onnx_input_size_property->setTooltip("Failed to load ONNX model - input size cannot be determined");
-					}
-					if (onnx_model_type_property)
-					{
-						onnx_model_type_property->setEnabled(false);
-						onnx_model_type_property->setTooltip("Failed to load ONNX model - model type cannot be determined");
-					}
-					
-					// Re-enable Darknet-specific fields since ONNX loading failed
-					if (darknet_template_property)
-					{
-						darknet_template_property->setEnabled(true);
-						darknet_template_property->setTooltip("The configuration template will be filled in once you select a configuration file within the Darknet Options window. It indicates which Darknet configuration file is used as a template when creating the project's configuration.");
-					}
-					if (darknet_config_property)
-					{
-						darknet_config_property->setEnabled(true);
-						darknet_config_property->setTooltip("Darknet configuration file");
-					}
-					
-					// Disable ONNX-specific fields since ONNX loading failed
-					if (onnx_input_size_property)
-					{
-						onnx_input_size_property->setEnabled(false);
-						onnx_input_size_property->setTooltip("Failed to load ONNX model - input size cannot be determined");
-					}
-					if (onnx_model_type_property)
-					{
-						onnx_model_type_property->setEnabled(false);
-						onnx_model_type_property->setTooltip("Failed to load ONNX model - model type cannot be determined");
-					}
-					
-					// Re-enable validation
-					initializing = false;
 				}
+
+				onnx_input_size = String(width) + " x " + String(height);
+				const bool is_dynamic = cfg().get_bool("project_" + cfg_key + "_onnx_is_dynamic", true);
+				onnx_is_dynamic = is_dynamic ? "Dynamic" : "Static";
+
+				if (onnx_input_size_property)
+				{
+					onnx_input_size_property->setEnabled(true);
+					onnx_input_size_property->setTooltip("Input size for ONNX models. For models with dynamic height/width, this can be changed.");
+				}
+				if (onnx_model_type_property)
+				{
+					onnx_model_type_property->setEnabled(true);
+					onnx_model_type_property->setTooltip("Shows whether the ONNX model has static or dynamic input dimensions");
+				}
+				if (onnx_class_mapping_property)
+				{
+					onnx_class_mapping_property->setEnabled(true);
+					onnx_class_mapping_property->setTooltip("Configure how classes detected by the model map to project dataset classes.");
+				}
+				if (darknet_template_property)
+				{
+					darknet_template_property->setEnabled(false);
+					darknet_template_property->setTooltip("Not applicable for ONNX models");
+				}
+				if (darknet_config_property)
+				{
+					darknet_config_property->setEnabled(false);
+					darknet_config_property->setTooltip("Not applicable for ONNX models");
+				}
+
+				initializing = false;
+				onnx_processed = true;
 			}
 			break;
 		}
@@ -954,6 +919,11 @@ void dm::StartupCanvas::selectedRowsChanged(int rowNumber)
 				{
 					onnx_model_type_property->setEnabled(false);
 					onnx_model_type_property->setTooltip("Not applicable for Darknet models");
+				}
+				if (onnx_class_mapping_property)
+				{
+					onnx_class_mapping_property->setEnabled(false);
+					onnx_class_mapping_property->setTooltip("Not applicable for Darknet models");
 				}
 				
 				// Re-enable validation
@@ -1154,6 +1124,14 @@ void dm::StartupCanvas::filter_out_extra_weight_files()
 				info.short_name.find("_last" + std::string(is_weights ? ".weights" : ".onnx")) != std::string::npos ||
 				info.short_name.find("_final" + std::string(is_weights ? ".weights" : ".onnx")) != std::string::npos)
 			{
+				if (is_onnx)
+				{
+					Log("keeping ONNX file without MD5: " + info.full_name);
+					new_files.push_back(info);
+					md5s.insert("onnx:" + info.full_name);
+				}
+				else
+				{
 				Log("calculating MD5 checksum for " + info.full_name);
 				const std::string md5 = MD5(File(info.full_name)).toHexString().toStdString();
 				if (md5s.count(md5) == 0)
@@ -1166,6 +1144,7 @@ void dm::StartupCanvas::filter_out_extra_weight_files()
 				{
 					Log("skipping the file due to duplicate MD5 sum: " + info.full_name);
 					extra_weights_files.insert(info.full_name);
+				}
 				}
 			}
 			else
@@ -1228,4 +1207,40 @@ void dm::StartupCanvas::calculate_size_of_directory()
 	}
 
 	return;
+}
+
+
+void dm::StartupCanvas::show_model_class_mapping()
+{
+	Log("class mapping requested for project " + cfg_key);
+
+	const String names = darknet_names_filename.toString();
+	if (names.isEmpty() || names.toLowerCase().endsWith(".names") == false)
+	{
+		AlertWindow::showMessageBoxAsync(AlertWindow::AlertIconType::InfoIcon, "DarkMark", "Please select a project .names file first.");
+		return;
+	}
+
+	std::vector<std::string> project_classes;
+	load_class_names_file(names.toStdString(), project_classes);
+	if (project_classes.empty())
+	{
+		AlertWindow::showMessageBoxAsync(AlertWindow::AlertIconType::InfoIcon, "DarkMark", "Could not read the project .names file.");
+		return;
+	}
+
+	std::vector<std::string> model_classes;
+	const String weights = darknet_weights_filename.toString();
+	if (weights.isNotEmpty() && (weights.toLowerCase().endsWith(".onnx") || weights.toLowerCase().endsWith(".weights")))
+	{
+		// Path-only: do not open/stat the weights file itself.
+		const std::string companion = File(weights).getSiblingFile(File(weights).getFileNameWithoutExtension() + ".names").getFullPathName().toStdString();
+		load_class_names_file(companion, model_classes);
+	}
+
+	const std::string prefix = "project_" + cfg_key + "_";
+	MessageManager::callAsync([prefix, project_classes, model_classes]()
+	{
+		show_model_class_mapping_dialog(prefix, project_classes, model_classes, nullptr);
+	});
 }

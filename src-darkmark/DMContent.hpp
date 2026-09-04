@@ -5,6 +5,12 @@
 #include "DarkMark.hpp"
 
 
+namespace OnnxHelp
+{
+	struct PredictionResult;
+}
+
+
 namespace dm
 {
 	/// Different ways in which the images may be sorted.
@@ -114,6 +120,36 @@ namespace dm
 			DMContent & accept_current_mark();
 
 			DMContent & accept_all_marks();
+
+			DMContent & accept_marks_of_class(const int target_class_idx);
+
+			DMContent & accept_marks_of_current_class();
+
+			DMContent & show_model_class_mapping_wnd();
+
+			DMContent & show_batch_autolabel_wnd();
+
+			int get_mapped_class_idx(const int model_class_idx) const;
+
+			void init_model_class_mapping();
+
+			void load_model_class_mapping();
+
+			void save_model_class_mapping();
+
+			bool load_marks_from_disk_files(const std::string & image_filename, const cv::Size & image_size, VMarks & out_marks, bool & out_completely_empty) const;
+
+			bool save_marks_to_disk_files(const std::string & image_filename, const VMarks & marks_to_save, const cv::Size & image_size, double scale_factor, bool image_is_completely_empty) const;
+
+			void refresh_duplicate_prediction_flags();
+
+			bool is_duplicate_of_existing_marks(const Mark & prediction, const VMarks & existing_marks, const cv::Size & image_size, double iou_threshold = -1.0) const;
+
+			bool is_mark_visible_for_navigation(const Mark & m) const;
+
+			Mark make_prediction_mark_from_darkhelp(const DarkHelp::PredictionResult & prediction, int mapped_idx, const cv::Size & image_size) const;
+
+			Mark make_prediction_mark_from_onnx(const OnnxHelp::PredictionResult & prediction, int mapped_idx, const cv::Size & image_size) const;
 
 			DMContent & erase_all_marks();
 
@@ -237,6 +273,11 @@ namespace dm
 			int corner_size;
 			int selected_mark;
 			std::vector<int> selected_marks; ///< Indices of currently selected marks for multi-selection.
+			std::vector<std::string> model_class_names;
+			std::vector<int> model_to_project_class_map;
+			double assisted_labeling_iou_threshold;
+			bool hide_duplicate_predictions;
+			bool model_class_mapping_warning_shown;
 
 			void toggleMarkSelection(int idx);
 			void clearSelection();

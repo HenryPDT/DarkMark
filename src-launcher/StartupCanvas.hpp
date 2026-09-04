@@ -52,6 +52,7 @@ namespace dm
 		virtual void buttonClicked(Button * button);
 
 		void delete_extra_weights_files();
+		void show_model_class_mapping();
 
 		void initialize_on_thread();
 
@@ -92,6 +93,7 @@ namespace dm
 		
 		PropertyComponent* onnx_input_size_property;  // Reference to the ONNX input size property for editability control
 		PropertyComponent* onnx_model_type_property;  // Reference to the ONNX model type property for editability control
+		PropertyComponent* onnx_class_mapping_property; // Reference to the ONNX class mapping property
 		PropertyComponent* darknet_template_property;  // Reference to the Darknet template property for editability control
 		PropertyComponent* darknet_config_property;    // Reference to the Darknet config property for editability control
 
