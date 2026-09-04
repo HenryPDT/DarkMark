@@ -501,7 +501,7 @@ dm::DarknetWnd::DarknetWnd(dm::DMContent & c) :
 	if (normal_interface)
 	{
 		std::string name;
-		const std::string darknet_weights = cfg().get_str(content.cfg_prefix + "weights");
+		const std::string darknet_weights = cfg().get_str(content.cfg_prefix + "weights", "");
 		if (darknet_weights.empty() == false)
 		{
 			File f(darknet_weights);
@@ -1192,7 +1192,7 @@ void dm::DarknetWnd::create_Darknet_training_and_validation_files(
 		fs	<< "classes = "	<< content.names.size() - 1						<< std::endl
 			<< "train = "	<< info.train_filename							<< std::endl
 			<< "valid = "	<< info.valid_filename							<< std::endl
-			<< "names = "	<< cfg().get_str(content.cfg_prefix + "names")	<< std::endl
+			<< "names = "	<< cfg().get_str(content.cfg_prefix + "names", "")	<< std::endl
 			<< "backup = "	<< info.project_dir								<< std::endl;
 	}
 
@@ -1418,7 +1418,7 @@ void dm::DarknetWnd::create_Darknet_shell_scripts()
 	if (true)
 	{
 		std::string cmd =
-				cfg().get_str("darknet_executable") +
+				cfg().get_str("darknet_executable", "") +
 				" detector train " +
 				(v_verbose_output		.getValue() ? "-verbose "	: "") +
 				(v_keep_augmented_images.getValue() ? "-show_imgs "	: "") +
@@ -1431,7 +1431,7 @@ void dm::DarknetWnd::create_Darknet_shell_scripts()
 		}
 		if (info.restart_training)
 		{
-			cmd += " " + cfg().get_str(content.cfg_prefix + "weights");
+			cmd += " " + cfg().get_str(content.cfg_prefix + "weights", "");
 			cmd += " -clear";
 		}
 

@@ -67,8 +67,8 @@ dm::SettingsWnd::SettingsWnd(dm::DMContent & c) :
 		peer->setIcon(DarkMarkLogo());
 	}
 
-	v_darknet_executable	= String(cfg().get_str("darknet_executable"));
-	v_darknet_templates		= String(cfg().get_str("darknet_templates"));
+	v_darknet_executable	= String(cfg().get_str("darknet_executable", ""));
+	v_darknet_templates		= String(cfg().get_str("darknet_templates", ""));
 
 	if (dmapp().darkhelp_nn)
 	{

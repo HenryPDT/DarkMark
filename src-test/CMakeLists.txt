@@ -17,9 +17,26 @@ ELSE ()
 	TARGET_LINK_LIBRARIES ( darkmark_filename_sort_tests ${GTEST_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
 ENDIF ()
 
-TARGET_COMPILE_FEATURES ( darkmark_filename_sort_tests PRIVATE cxx_std_17 )
-
 ADD_TEST ( NAME darkmark_filename_sort_tests COMMAND darkmark_filename_sort_tests )
+
+ADD_EXECUTABLE ( darkmark_codebase_invariants_tests
+	TestMain.cpp
+	TestCodebaseInvariants.cpp
+)
+
+TARGET_COMPILE_DEFINITIONS ( darkmark_codebase_invariants_tests PRIVATE
+	DARKMARK_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+IF ( TARGET GTest::gtest )
+	TARGET_LINK_LIBRARIES ( darkmark_codebase_invariants_tests GTest::gtest ${CMAKE_THREAD_LIBS_INIT} )
+ELSE ()
+	TARGET_LINK_LIBRARIES ( darkmark_codebase_invariants_tests ${GTEST_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
+ENDIF ()
+
+TARGET_COMPILE_FEATURES ( darkmark_codebase_invariants_tests PRIVATE cxx_std_17 )
+
+ADD_TEST ( NAME darkmark_codebase_invariants_tests COMMAND darkmark_codebase_invariants_tests )
 
 
 #FILE ( GLOB TEST_SOURCE *.cpp		)

@@ -11,7 +11,7 @@ void dm::find_files(File dir, VStr & image_filenames, VStr & json_filenames, VSt
 
 	Log("finding all images and markup files in " + dir.getFullPathName().toStdString());
 
-	const std::regex image_filename_regex(cfg().get_str("image_regex"), std::regex::icase | std::regex::nosubs | std::regex::optimize | std::regex::ECMAScript);
+	const std::regex image_filename_regex(cfg().get_str("image_regex", "^.+\\.(?:(?:jpe?g)|(?:bmp)|(?:png)|(?:webp)|(?:tiff?)|(?:gif))$"), std::regex::icase | std::regex::nosubs | std::regex::optimize | std::regex::ECMAScript);
 
 #ifdef WIN32
 	const std::string chart1			= "\\chart.png";

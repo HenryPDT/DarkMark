@@ -67,8 +67,8 @@ dm::FilterWnd::FilterWnd(dm::DMContent & c) :
 		peer->setIcon(DarkMarkLogo());
 	}
 
-	v_inclusion_regex = cfg().get_str(content.project_info.cfg_prefix + "inclusion_regex").c_str();
-	v_exclusion_regex = cfg().get_str(content.project_info.cfg_prefix + "exclusion_regex").c_str();
+	v_inclusion_regex = cfg().get_str(content.project_info.cfg_prefix + "inclusion_regex", "").c_str();
+	v_exclusion_regex = cfg().get_str(content.project_info.cfg_prefix + "exclusion_regex", "").c_str();
 	v_age_of_annotations			= 0;
 	v_include_all_classes			= true;
 	v_include_empty_images			= true;

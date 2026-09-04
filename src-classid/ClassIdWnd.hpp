@@ -11,15 +11,7 @@ namespace dm
 	class ExportDialog : public DocumentWindow, public Button::Listener
 	{
 		public:
-			// Callback interface for when dialog is dismissed
-			class Callback
-			{
-				public:
-					virtual ~Callback() = default;
-					virtual void exportDialogFinished(bool wasOkPressed, const ExportDialog* dialog) = 0;
-			};
-
-			ExportDialog(Callback* callback = nullptr);
+			ExportDialog(Component * parent = nullptr);
 			virtual ~ExportDialog();
 			
 			virtual void closeButtonPressed() override;
@@ -41,7 +33,6 @@ namespace dm
 			void updateSplitControls();
 			void dismissDialog(bool okPressed);
 			
-			Callback* callback;
 			Component canvas;
 			Label header_message;
 			
@@ -76,7 +67,7 @@ namespace dm
 			bool export_dfine_format;
 	};
 
-	class ClassIdWnd : public DocumentWindow, public Button::Listener, public ThreadWithProgressWindow, public TableListBoxModel, public ExportDialog::Callback
+	class ClassIdWnd : public DocumentWindow, public Button::Listener, public ThreadWithProgressWindow, public TableListBoxModel
 	{
 		public:
 
@@ -145,9 +136,6 @@ namespace dm
 									double train_percentage = 80.0,
 									const std::optional<int>& seed = std::nullopt);
 
-			// ExportDialog::Callback implementation
-			virtual void exportDialogFinished(bool wasOkPressed, const ExportDialog* dialog) override;
-
 			void rebuild_table();
 
 			/// Used to stop the counting thread in cases where the window is closed early.
@@ -214,7 +202,5 @@ namespace dm
 			double train_percentage;
 			std::optional<int> export_seed;
 
-			// Export dialog tracking
-			std::unique_ptr<ExportDialog> export_dialog;
 	};
 }

@@ -150,7 +150,7 @@ dm::ProjectInfo::ProjectInfo(const std::string & prefix)
 
 	try
 	{
-		rebuild(cfg().get_str(cfg_prefix + "dir"));
+		rebuild(cfg().get_str(cfg_prefix + "dir", ""));
 	}
 	catch (const std::exception & e)
 	{
@@ -197,7 +197,7 @@ dm::ProjectInfo & dm::ProjectInfo::rebuild(const std::string & project_directory
 
 	if (cfg_template.empty())
 	{
-		cfg_template = File(cfg().get_str("darknet_templates")).getChildFile("yolov4-tiny.cfg").getFullPathName().toStdString();
+		cfg_template = File(cfg().get_str("darknet_templates", "")).getChildFile("yolov4-tiny.cfg").getFullPathName().toStdString();
 	}
 
 	// check to make sure the template .cfg files actually exists

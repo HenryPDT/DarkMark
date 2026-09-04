@@ -555,8 +555,8 @@ void dm::DarkMarkApplication::initialise(const String & commandLine)
 
 	// before we go any further, check to see if Darknet is installed where we think it is
 
-	const auto darknet_executable	= cfg->get_str("darknet_executable"	);
-	const auto darknet_templates	= cfg->get_str("darknet_templates"	);
+	const auto darknet_executable	= cfg->get_str("darknet_executable", "");
+	const auto darknet_templates	= cfg->get_str("darknet_templates", "");
 
 	File f(darknet_executable);
 	if (not f.exists())

@@ -63,7 +63,8 @@ namespace dm
 	class SettingsWnd;
 	class FilterWnd;
 	class KeybindEditorWnd;
-	class BatchAutoLabelDialog;
+	class DMModelClassMapWnd;
+	class DMContentBatchAutoLabel;
 	class ProjectInfo;
 	class DMContentReview;
 	class DMContentReviewIoU;

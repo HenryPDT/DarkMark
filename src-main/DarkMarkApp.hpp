@@ -48,8 +48,9 @@ namespace dm
 			std::unique_ptr<FilterWnd>			filter_wnd;
 			std::unique_ptr<ClassIdWnd>			class_id_wnd;
 			std::unique_ptr<KeybindEditorWnd>	keybind_editor_wnd;
-			std::unique_ptr<BatchAutoLabelDialog> batch_autolabel_dialog;
 			std::unique_ptr<WndCfgTemplates>	cfg_template_wnd;
+			std::unique_ptr<DMModelClassMapWnd>	model_class_map_wnd;
+			std::unique_ptr<DMContentBatchAutoLabel> batch_autolabel_wnd;
 
 #if JUCE_MAC
 			std::unique_ptr<DMAppMenuModel> 	app_menu_model;

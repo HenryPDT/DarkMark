@@ -6,9 +6,8 @@
 #include <random>
 
 
-dm::ExportDialog::ExportDialog(Callback* callback) :
+dm::ExportDialog::ExportDialog(Component * parent) :
 	DocumentWindow("DarkMark - Export Dataset", Colours::darkgrey, TitleBarButtons::closeButton),
-	callback(callback),
 	header_message("", "Configure export settings:"),
 	lbl_image_selection("", "Images to export:"),
 	btn_all_images("All Images"),
@@ -33,7 +32,7 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 	export_coco_format(false),
 	export_dfine_format(false)
 {
-	setContentNonOwned(&canvas, true);
+	setContentNonOwned(&canvas, false);
 	setUsingNativeTitleBar(true);
 	setResizable(false, false);
 	setDropShadowEnabled(true);
@@ -116,15 +115,19 @@ dm::ExportDialog::ExportDialog(Callback* callback) :
 		peer->setIcon(DarkMarkLogo());
 	}
 
-	centreWithSize(500, 450);
+	const int dlg_w = 520;
+	const int dlg_h = 460;
+	setResizeLimits(480, 420, 800, 700);
+	centreAroundComponent(parent, dlg_w, dlg_h);
 	setVisible(true);
 	
 	// Force a repaint to ensure proper rendering on problematic systems
 	repaint();
 	
-	// Add a small delay to ensure the window is properly initialized
-	MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::ExportDialog>(this)]() {
+	// Re-assert proper positioning and sizing after window manager maps the window
+	MessageManager::callAsync([safe_this = juce::Component::SafePointer<dm::ExportDialog>(this), parent, dlg_w, dlg_h]() {
 		if (safe_this != nullptr) {
+			safe_this->centreAroundComponent(parent, dlg_w, dlg_h);
 			safe_this->repaint();
 			safe_this->toFront(true);
 		}
@@ -160,11 +163,7 @@ void dm::ExportDialog::dismissDialog(bool okPressed)
 {
 	ok_pressed = okPressed;
 	setVisible(false);
-	
-	if (callback)
-	{
-		callback->exportDialogFinished(okPressed, this);
-	}
+	exitModalState(okPressed ? 1 : 0);
 }
 
 void dm::ExportDialog::resized()
@@ -240,7 +239,7 @@ void dm::ExportDialog::resized()
 	fb_rows.items.add(FlexItem().withFlex(1.0));
 	fb_rows.items.add(FlexItem(button_row).withHeight(30.0).withMargin(FlexItem::Margin(0, 0, margin_size, 0)));
 
-	auto r = getLocalBounds();
+	auto r = canvas.getLocalBounds();
 	r.reduce(margin_size, margin_size);
 	fb_rows.performLayout(r);
 }
@@ -593,12 +592,40 @@ void dm::ClassIdWnd::buttonClicked(Button * button)
 	else if (button == &export_button)
 	{
 		dm::Log("export button has been pressed!");
-		setEnabled(false);
+		ExportDialog dlg(this);
+		dlg.runModalLoop();
+		if (dlg.wasOkPressed())
+		{
+			export_all_images = dlg.getExportAllImages();
+			export_yolov5_format = dlg.getExportYolov5Format();
+			export_coco_format = dlg.getExportCocoFormat();
+			export_dfine_format = dlg.getExportDfineFormat();
+			export_with_split = dlg.getExportWithSplit();
 
-		// Create and show the export dialog using async pattern
-		export_dialog.reset(new ExportDialog(this));
-		export_dialog->setVisible(true);
-		export_dialog->toFront(true);
+			if (export_with_split)
+			{
+				train_percentage = dlg.getTrainPercentage();
+				if (dlg.hasSeed())
+				{
+					export_seed = dlg.getSeed();
+					dm::Log("Export with split: " + std::to_string(train_percentage) + "% train, seed: " + std::to_string(*export_seed));
+				}
+				else
+				{
+					export_seed = std::nullopt;
+					dm::Log("Export with split: " + std::to_string(train_percentage) + "% train, random seed");
+				}
+			}
+			else
+			{
+				dm::Log("Export without split");
+			}
+
+			is_exporting = true;
+			runThread(); // calls run() and waits for it to be done
+			dm::Log("forcing the window to close");
+			closeButtonPressed();
+		}
 	}
 	else if (button == &apply_button)
 	{
@@ -2527,48 +2554,6 @@ void dm::ClassIdWnd::generate_dataset_yaml(const std::filesystem::path & output_
 	}
 }
 
-
-void dm::ClassIdWnd::exportDialogFinished(bool wasOkPressed, const ExportDialog* dialog)
-{
-	// Re-enable the window
-	setEnabled(true);
-	
-	if (wasOkPressed)
-	{
-		export_all_images = dialog->getExportAllImages();
-		export_yolov5_format = dialog->getExportYolov5Format();
-		export_coco_format = dialog->getExportCocoFormat();
-		export_dfine_format = dialog->getExportDfineFormat();
-		export_with_split = dialog->getExportWithSplit();
-		
-		if (export_with_split)
-		{
-			train_percentage = dialog->getTrainPercentage();
-			if (dialog->hasSeed())
-			{
-				export_seed = dialog->getSeed();
-				dm::Log("Export with split: " + std::to_string(train_percentage) + "% train, seed: " + std::to_string(*export_seed));
-			}
-			else
-			{
-				export_seed = std::nullopt;
-				dm::Log("Export with split: " + std::to_string(train_percentage) + "% train, random seed");
-			}
-		}
-		else
-		{
-			dm::Log("Export without split");
-		}
-		
-		// Now that all data is retrieved, it's safe to reset the dialog
-		export_dialog.reset();
-		
-		is_exporting = true;
-		runThread(); // calls run() and waits for it to be done
-		dm::Log("forcing the window to close");
-		closeButtonPressed();
-	}
-}
 
 
 

@@ -96,8 +96,8 @@ dm::DMContent::DMContent(const std::string & prefix) :
 
 	try
 	{
-		const std::string inclusion_regex = cfg().get_str(cfg_prefix + "inclusion_regex");
-		const std::string exclusion_regex = cfg().get_str(cfg_prefix + "exclusion_regex");
+		const std::string inclusion_regex = cfg().get_str(cfg_prefix + "inclusion_regex", "");
+		const std::string exclusion_regex = cfg().get_str(cfg_prefix + "exclusion_regex", "");
 
 		const std::regex rx(inclusion_regex + exclusion_regex);
 
@@ -269,8 +269,8 @@ void dm::DMContent::resized()
 void dm::DMContent::start_darknet()
 {
 	Log("loading darknet neural network");
-	const std::string weights_filename	= cfg().get_str(cfg_prefix + "weights"	);
-	const std::string names_filename	= cfg().get_str(cfg_prefix + "names"	);
+	const std::string weights_filename	= cfg().get_str(cfg_prefix + "weights", "");
+	const std::string names_filename	= cfg().get_str(cfg_prefix + "names", "");
 	names.clear();
 
 	dmapp().darkhelp_nn.reset(nullptr);
@@ -368,7 +368,7 @@ void dm::DMContent::start_darknet()
 	{
 		try
 		{
-			const std::string darknet_cfg = cfg().get_str(cfg_prefix + "cfg");
+			const std::string darknet_cfg = cfg().get_str(cfg_prefix + "cfg", "");
 			Log("attempting to load neural network " + darknet_cfg + " / " + weights_filename + " / " + names_filename);
 			dmapp().darkhelp_nn.reset(new DarkHelp::NN(darknet_cfg, weights_filename, names_filename));
 			Log("neural network loaded in " + darkhelp_nn().duration_string());
@@ -562,7 +562,7 @@ dm::DMContent & dm::DMContent::set_class(const size_t class_idx)
 		if (class_idx >= names.size() - 1)
 		{
 			Log("class idx \"" + std::to_string(class_idx) + "\" is beyond the last index");
-			AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "DarkMark", "Class id #" + std::to_string(class_idx) + " is beyond the highest class defined in " + cfg().get_str(cfg_prefix + "names") + ".");
+			AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "DarkMark", "Class id #" + std::to_string(class_idx) + " is beyond the highest class defined in " + cfg().get_str(cfg_prefix + "names", "") + ".");
 		}
 		else
 		{
@@ -2307,28 +2307,27 @@ dm::DMContent & dm::DMContent::show_model_class_mapping_wnd()
 		project_classes.push_back(names.at(j));
 	}
 
-	const std::string prefix = cfg_prefix;
-	const std::vector<std::string> model_classes = model_class_names;
-	auto safe = juce::Component::SafePointer<DMContent>(this);
-	MessageManager::callAsync([prefix, project_classes, model_classes, safe]()
-	{
-		if (safe == nullptr)
-		{
-			return;
-		}
-		show_model_class_mapping_dialog(prefix, project_classes, model_classes, safe.getComponent());
-	});
+	show_model_class_mapping_dialog(cfg_prefix, project_classes, model_class_names, this, this);
 	return *this;
 }
 
 
 dm::DMContent & dm::DMContent::show_batch_autolabel_wnd()
 {
-	if (!dmapp().batch_autolabel_dialog)
+	if (!dmapp().onnx_nn && !dmapp().darkhelp_nn)
 	{
-		dmapp().batch_autolabel_dialog.reset(new BatchAutoLabelDialog(*this));
+		AlertWindow::showMessageBoxAsync(AlertWindow::AlertIconType::WarningIcon, "DarkMark", "No neural network is loaded.");
+		return *this;
 	}
-	dmapp().batch_autolabel_dialog->toFront(true);
+
+	if (dmapp().batch_autolabel_wnd)
+	{
+		dmapp().batch_autolabel_wnd->toFront(true);
+		return *this;
+	}
+
+	dmapp().batch_autolabel_wnd.reset(new DMContentBatchAutoLabel(*this));
+
 	return *this;
 }
 

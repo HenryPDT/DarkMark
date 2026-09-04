@@ -152,19 +152,19 @@ dm::Cfg & dm::Cfg::first_time_initialization(void)
 	// note where image_regex is used, the option "std::regex::icase" also gets set, so don't worry about uppercase/lowercase
 
 	// update the image extension list to include webp files which had previously been missed (2022-09-03)
-	if (get_str("image_regex") == "^.+\\.(?:(?:jpe?g)|(?:bmp)|(?:png)|(?:gif))$") // the old value
+	if (get_str("image_regex", "") == "^.+\\.(?:(?:jpe?g)|(?:bmp)|(?:png)|(?:gif))$") // the old value
 	{
 		setValue("image_regex", "^.+\\.(?:(?:jpe?g)|(?:bmp)|(?:png)|(?:webp)|(?:gif))$");
 	}
 
 	// update the image extension list to include TIFF files
-	if (get_str("image_regex") == "^.+\\.(?:(?:jpe?g)|(?:bmp)|(?:png)|(?:webp)|(?:gif))$")
+	if (get_str("image_regex", "") == "^.+\\.(?:(?:jpe?g)|(?:bmp)|(?:png)|(?:webp)|(?:gif))$")
 	{
 		setValue("image_regex", "^.+\\.(?:(?:jpe?g)|(?:bmp)|(?:png)|(?:webp)|(?:tiff?)|(?:gif))$");
 	}
 
 	// see if the (old-style) darknet directory exists, and if not, see if we can quickly find it
-	auto darknet_dir = get_str("darknet_dir");
+	auto darknet_dir = get_str("darknet_dir", "");
 	File f(darknet_dir);
 	if (f.exists() == false or f.isDirectory() == false)
 	{
@@ -229,7 +229,7 @@ dm::Cfg & dm::Cfg::first_time_initialization(void)
 		}
 	}
 
-	auto darknet_executable = get_str("darknet_executable");
+	auto darknet_executable = get_str("darknet_executable", "");
 	f = File(darknet_executable);
 	if (f.exists() == false)
 	{
@@ -289,7 +289,7 @@ dm::Cfg & dm::Cfg::first_time_initialization(void)
 		set_str("darknet_executable", darknet_executable);
 	}
 
-	auto darknet_templates = get_str("darknet_templates");
+	auto darknet_templates = get_str("darknet_templates", "");
 	f = File(darknet_templates);
 	if (f.exists() == false)
 	{

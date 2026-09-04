@@ -39,12 +39,42 @@ Once Darknet and DarkHelp have been built and installed, run the following comma
     mkdir build
     cd build
     cmake -DCMAKE_BUILD_TYPE=Release ..
-    make -j4 package
+    make -j$(nproc) package
     sudo dpkg -i darkmark*.deb
 
 If you are using WSL2, Docker, or a Linux distro that does not come with the default fonts typically found on Ubuntu, you'll also need to install this:
 
     sudo apt-get install fonts-liberation
+
+### Understanding the Build Commands
+
+* **`cmake -DCMAKE_BUILD_TYPE=Release ..`**:
+  Configures the build. CMake checks system dependencies and generates the `Makefile`. Setting `-DCMAKE_BUILD_TYPE=Release` enables compiler optimizations (`-O3`) for fast performance. You only need to run this once or when `CMakeLists.txt` changes.
+* **`make -j$(nproc) package`**:
+  Compiles the codebase using all CPU cores (`-j$(nproc)`) and bundles the executable, icons, and desktop entries into a Debian package (`.deb`).
+* **`sudo dpkg -i darkmark*.deb`**:
+  Installs the generated package system-wide so DarkMark is accessible from application menus and any terminal path.
+
+### Development vs. Installation Workflows
+
+* **For active development / testing changes:**
+  You do not need to rebuild the `.deb` package and run `sudo dpkg -i` on every edit. Instead, compile incrementally and run the binary directly:
+  ```sh
+  # Fast incremental build
+  cmake --build build -j$(nproc)
+
+  # Run unit tests
+  ctest --test-dir build --output-on-failure
+
+  # Run the newly built binary directly
+  ./build/DarkMark
+  ```
+* **For final system installation:**
+  ```sh
+  cd build
+  make -j$(nproc) package
+  sudo dpkg -i darkmark*.deb
+  ```
 
 ## ONNX Runtime C++ Dependency
 
@@ -117,3 +147,25 @@ Some links to specific useful pages:
 - [Darknet configuration files](https://www.ccoderun.ca/darkmark/Configuration.html)
 - [Darknet FAQ](https://www.ccoderun.ca/programming/darknet_faq/)
 - [Discord server for Darknet, YOLO, DarkHelp, and DarkMark](https://discord.gg/MQw32W9Cqr)
+
+# Developer Guidelines: Safe UI & Dialog Architecture
+
+To prevent X11 server lockups, display server freezes, and remote desktop (e.g. RustDesk, VNC) pointer grab deadlocks, follow these architectural rules for all JUCE windows:
+
+1. **Never call `canvas.setBounds(...)` inside `DocumentWindow::resized()`**:
+   - JUCE's `DocumentWindow::resized()` automatically sets the content component (`canvas`) bounds to the interior dimensions (accounting for borders and title bars).
+   - Manually resizing `canvas` inside `resized()` triggers JUCE's `childBoundsChanged`, triggering another window resize in an **infinite synchronous recursion loop** that locks the X11 server and pegs CPU at 100%.
+   - Always position child components within `canvas.getLocalBounds()`.
+
+2. **Always pass `false` to `setContentNonOwned`**:
+   - Use `setContentNonOwned(&canvas, false);` to disable `resizeToFitWhenContentChangesSize`.
+
+3. **Use modeless fake-modal instead of `runModalLoop()`**:
+   - Secondary windows should be owned as `std::unique_ptr` in `DarkMarkApplication`.
+   - On opening, disable the parent window (`parent->setEnabled(false);`) and display modelessly (`setVisible(true); toFront(true);`).
+   - On closing, re-enable the parent window (`parent->setEnabled(true);`) and schedule cleanup asynchronously (`MessageManager::callAsync(...)`).
+   - Avoid synchronous `runModalLoop()` on secondary windows, as it traps pointer events and breaks under remote display injection.
+
+4. **Automated Enforcement**:
+   - Regression tests in `src-test/TestCodebaseInvariants.cpp` run automatically with `ctest` to guarantee no `canvas.setBounds` inside `DocumentWindow::resized()` or unsafe modal loops can be committed.
+

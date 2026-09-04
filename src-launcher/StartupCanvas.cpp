@@ -99,7 +99,10 @@ class ClassMapButtonPropertyComponent : public ButtonPropertyComponent
 		virtual void buttonClicked() override
 		{
 			dm::Log("class mapping button clicked");
-			canvas.show_model_class_mapping();
+			MessageManager::callAsync([this]()
+			{
+				canvas.show_model_class_mapping();
+			});
 		}
 
 		virtual String getButtonText() const override
@@ -1132,19 +1135,19 @@ void dm::StartupCanvas::filter_out_extra_weight_files()
 				}
 				else
 				{
-				Log("calculating MD5 checksum for " + info.full_name);
-				const std::string md5 = MD5(File(info.full_name)).toHexString().toStdString();
-				if (md5s.count(md5) == 0)
-				{
-					Log("keeping the file " + info.full_name + " (md5=" + md5 + ")");
-					new_files.push_back(info);
-					md5s.insert(md5);
-				}
-				else
-				{
-					Log("skipping the file due to duplicate MD5 sum: " + info.full_name);
-					extra_weights_files.insert(info.full_name);
-				}
+					Log("calculating MD5 checksum for " + info.full_name);
+					const std::string md5 = MD5(File(info.full_name)).toHexString().toStdString();
+					if (md5s.count(md5) == 0)
+					{
+						Log("keeping the file " + info.full_name + " (md5=" + md5 + ")");
+						new_files.push_back(info);
+						md5s.insert(md5);
+					}
+					else
+					{
+						Log("skipping the file due to duplicate MD5 sum: " + info.full_name);
+						extra_weights_files.insert(info.full_name);
+					}
 				}
 			}
 			else
@@ -1239,8 +1242,5 @@ void dm::StartupCanvas::show_model_class_mapping()
 	}
 
 	const std::string prefix = "project_" + cfg_key + "_";
-	MessageManager::callAsync([prefix, project_classes, model_classes]()
-	{
-		show_model_class_mapping_dialog(prefix, project_classes, model_classes, nullptr);
-	});
+	show_model_class_mapping_dialog(prefix, project_classes, model_classes, this, nullptr);
 }

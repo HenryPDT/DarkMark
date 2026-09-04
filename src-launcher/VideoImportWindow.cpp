@@ -253,6 +253,7 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 	ef_onnx_width			.setJustification(Justification::centred);
 	ef_onnx_height			.setJustification(Justification::centred);
 
+	// Probe shape so static models lock the size fields and dynamic ones stay editable.
 	if (!onnx_model_path.empty() && File(onnx_model_path).existsAsFile())
 	{
 		try
@@ -261,10 +262,23 @@ dm::VideoImportWindow::VideoImportWindow(const std::string & dir, const VStr & v
 			const bool is_dyn = test_nn.is_dynamic();
 			ef_onnx_width.setEnabled(is_dyn);
 			ef_onnx_height.setEnabled(is_dyn);
+			const cv::Size sz = test_nn.get_input_size();
+			if (sz.width > 0 && sz.height > 0)
+			{
+				ef_onnx_width.setText(String(sz.width));
+				ef_onnx_height.setText(String(sz.height));
+			}
 		}
 		catch (...)
 		{
+			ef_onnx_width.setEnabled(true);
+			ef_onnx_height.setEnabled(true);
 		}
+	}
+	else
+	{
+		ef_onnx_width.setEnabled(true);
+		ef_onnx_height.setEnabled(true);
 	}
 
 	std::stringstream ss;
@@ -644,6 +658,8 @@ void dm::VideoImportWindow::buttonClicked(Button * button)
 			}
 			catch (...)
 			{
+				ef_onnx_width.setEnabled(true);
+				ef_onnx_height.setEnabled(true);
 			}
 		}
 	}
