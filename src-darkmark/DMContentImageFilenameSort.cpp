@@ -36,7 +36,7 @@ void dm::DMContentImageFilenameSort::run()
 	}
 
 	// first thing we need to do is sort alphabetically so we can maintain a predictable order between images (issue #38)
-	std::sort(content.image_filenames.begin(), content.image_filenames.end());
+	sort_filenames_alphabetically(content.image_filenames);
 
 	std::map<std::string, float> m;
 

@@ -1,6 +1,8 @@
 // DarkMark (C) 2019-2024 Stephane Charette <stephanecharette@gmail.com>
 
 #include <gtest/gtest.h>
+#include <iomanip>
+#include <iostream>
 
 
 int main(int argc, char **argv)

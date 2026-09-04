@@ -3,6 +3,7 @@
 #pragma once
 
 #include "DarkMark.hpp"
+#include "FilenameSort.hpp"
 
 
 namespace dm

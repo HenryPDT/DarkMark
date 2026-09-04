@@ -80,7 +80,7 @@ void dm::DMContentDeleteRotateAndFlipImages::run()
 
 	setStatusMessage("Sorting...");
 	setProgress(1.1);
-	std::sort(keep_filenames.begin(), keep_filenames.end());
+	sort_filenames_alphabetically(keep_filenames);
 
 	content.image_filenames.swap(keep_filenames);
 	content.load_image(0);

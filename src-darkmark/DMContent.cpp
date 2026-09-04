@@ -608,7 +608,7 @@ dm::DMContent & dm::DMContent::set_sort_order(const dm::ESort new_sort_order)
 		case ESort::kAlphabetical:
 		default:
 		{
-			std::sort(image_filenames.begin(), image_filenames.end());
+			sort_filenames_alphabetically(image_filenames);
 			break;
 		}
 	}
@@ -1568,7 +1568,7 @@ dm::DMContent & dm::DMContent::copy_marks_from_next_image()
 	// first we need to make a copy of the image list and sort it alphabetically;
 	// this helps us identify exactly which image is "previous" (assuming images are numbered!)
 	auto alphabetical_image_filenames = image_filenames;
-	std::sort(alphabetical_image_filenames.begin(), alphabetical_image_filenames.end());
+	sort_filenames_alphabetically(alphabetical_image_filenames);
 
 	// find the current index within the alphabetical list
 	size_t idx;
@@ -1609,7 +1609,7 @@ dm::DMContent & dm::DMContent::copy_marks_from_previous_image()
 	// first we need to make a copy of the image list and sort it alphabetically;
 	// this helps us identify exactly which image is "previous" (assuming images are numbered!)
 	auto alphabetical_image_filenames = image_filenames;
-	std::sort(alphabetical_image_filenames.begin(), alphabetical_image_filenames.end());
+	sort_filenames_alphabetically(alphabetical_image_filenames);
 
 	// find the current index within the alphabetical list
 	size_t idx;

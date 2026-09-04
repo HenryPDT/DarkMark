@@ -570,7 +570,7 @@ void dm::FilterWnd::apply_filters_on_thread()
 			v_images_after_filters	= size;
 			v_usable_images			= size;
 
-			std::sort(image_filenames.begin(), image_filenames.end());
+			sort_filenames_alphabetically(image_filenames);
 			filtered_image_filenames.swap(image_filenames);
 			class_ids_to_include.swap(class_ids);
 

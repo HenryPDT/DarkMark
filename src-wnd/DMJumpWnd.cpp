@@ -31,7 +31,7 @@ dm::DMJumpWnd::DMJumpWnd(DMContent & c) :
 	// determine all the positions where we need to draw a marker (indicating different image sets)
 	// (this only makes sense when the images are sorted alphabetically)
 	auto filenames = content.image_filenames;
-	std::sort(filenames.begin(), filenames.end());
+	sort_filenames_alphabetically(filenames);
 	filenames.push_back(" "); // insert a "dummy" file so when we process for markers we'll trigger and add a record for the last set of files
 
 	File previous_dir;
